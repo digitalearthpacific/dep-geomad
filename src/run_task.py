@@ -3,7 +3,7 @@ from typing import Tuple
 import typer
 from azure_logger import CsvLogger
 from dep_tools.azure import get_container_client
-from dep_tools.loaders import LandsatOdcLoader
+from dep_tools.loaders import FlatLandsatOdcLoader
 from dep_tools.namers import DepItemPath
 from dep_tools.processors import LandsatProcessor
 from dep_tools.runner import run_by_area
@@ -52,14 +52,26 @@ def main(
     if base_product == "landsat":
         base = "ls"
 
-    loader = LandsatOdcLoader(
+    loader = FlatLandsatOdcLoader(
         epsg=3832,
         datetime=datetime,
         dask_chunksize=dict(band=1, time=1, x=4096, y=4096),
-        odc_load_kwargs=dict(fail_on_error=False, resolution=30),
+        odc_load_kwargs=dict(
+            fail_on_error=False,
+            resolution=30,
+            bands=["qa_pixel", "red", "green", "blue", "nir08", "swir16", "swir22"],
+        ),
+        exclude_platforms=["landsat-7"],
+        nodata_value=0
     )
 
-    processor = GeoMADLandsatProcessor()
+    processor = GeoMADLandsatProcessor(
+        scale_and_offset=False,
+        dilate_mask=True,
+        work_chunks=(1801, 1801),
+        num_threads=4,
+        keep_ints=True
+    )
 
     itempath = DepItemPath(base, dataset_id, version, datetime)
 
