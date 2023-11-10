@@ -3,10 +3,11 @@ from typing import Tuple
 import typer
 from azure_logger import CsvLogger
 from dep_tools.azure import get_container_client
-from dep_tools.loaders import FlatLandsatOdcLoader
+from dep_tools.loaders import LandsatOdcLoader
 from dep_tools.namers import DepItemPath
 from dep_tools.processors import LandsatProcessor
 from dep_tools.runner import run_by_area
+from dep_tools.s2_utils import S2Processor
 from dep_tools.stac_utils import set_stac_properties
 from dep_tools.writers import AzureDsWriter
 from odc.algo import geomedian_with_mads
@@ -23,8 +24,8 @@ class GeoMADLandsatProcessor(LandsatProcessor):
         send_area_to_processor: bool = False,
         scale_and_offset: bool = False,
         dilate_mask: bool = True,
-        num_threads: int = 1,
-        work_chunks: Tuple[int, int] = (100, 100),
+        num_threads: int = 4,
+        work_chunks: Tuple[int, int] = (1000, 1000),
         keep_ints: bool = True,
     ) -> None:
         super().__init__(send_area_to_processor, scale_and_offset, dilate_mask, keep_ints)
@@ -34,6 +35,30 @@ class GeoMADLandsatProcessor(LandsatProcessor):
     def process(self, xr: DataArray) -> Dataset:
         xr = super().process(xr)
         data = xr.drop_vars(["qa_pixel"])
+        geomad = geomedian_with_mads(data, num_threads=self.num_threads, work_chunks=self.work_chunks)
+        output = set_stac_properties(data, geomad)
+        return output
+
+
+class GeoMADSentinelProcessor(S2Processor):
+
+    def __init__(
+        self,
+        send_area_to_processor: bool = False,
+        scale_and_offset: bool = False,
+        mask_clouds: bool = True,
+        dilate_mask: bool = True,
+        num_threads: int = 4,
+        work_chunks: Tuple[int, int] = (1000, 1000),
+        keep_ints: bool = True,
+    ) -> None:
+        super().__init__(send_area_to_processor, scale_and_offset, mask_clouds, dilate_mask, keep_ints)
+        self.num_threads = num_threads
+        self.work_chunks = work_chunks
+
+    def process(self, xr: DataArray) -> Dataset:
+        xr = super().process(xr)
+        data = xr.drop_vars(["SCL"])
         geomad = geomedian_with_mads(data, num_threads=self.num_threads, work_chunks=self.work_chunks)
         output = set_stac_properties(data, geomad)
         return output
@@ -52,7 +77,7 @@ def main(
     if base_product == "landsat":
         base = "ls"
 
-    loader = FlatLandsatOdcLoader(
+    loader = LandsatOdcLoader(
         epsg=3832,
         datetime=datetime,
         dask_chunksize=dict(band=1, time=1, x=4096, y=4096),
@@ -62,7 +87,9 @@ def main(
             bands=["qa_pixel", "red", "green", "blue", "nir08", "swir16", "swir22"],
         ),
         exclude_platforms=["landsat-7"],
-        nodata_value=0
+        nodata_value=0,
+        keep_ints=True,
+        flat_array=True,
     )
 
     processor = GeoMADLandsatProcessor(
