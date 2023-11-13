@@ -18,7 +18,6 @@ from src.grid import grid
 
 
 class GeoMADLandsatProcessor(LandsatProcessor):
-
     def __init__(
         self,
         send_area_to_processor: bool = False,
@@ -28,20 +27,23 @@ class GeoMADLandsatProcessor(LandsatProcessor):
         work_chunks: Tuple[int, int] = (1000, 1000),
         keep_ints: bool = True,
     ) -> None:
-        super().__init__(send_area_to_processor, scale_and_offset, dilate_mask, keep_ints)
+        super().__init__(
+            send_area_to_processor, scale_and_offset, dilate_mask, keep_ints
+        )
         self.num_threads = num_threads
         self.work_chunks = work_chunks
 
     def process(self, xr: DataArray) -> Dataset:
         xr = super().process(xr)
         data = xr.drop_vars(["qa_pixel"])
-        geomad = geomedian_with_mads(data, num_threads=self.num_threads, work_chunks=self.work_chunks)
+        geomad = geomedian_with_mads(
+            data, num_threads=self.num_threads, work_chunks=self.work_chunks
+        )
         output = set_stac_properties(data, geomad)
         return output
 
 
 class GeoMADSentinelProcessor(S2Processor):
-
     def __init__(
         self,
         send_area_to_processor: bool = False,
@@ -52,14 +54,22 @@ class GeoMADSentinelProcessor(S2Processor):
         work_chunks: Tuple[int, int] = (1000, 1000),
         keep_ints: bool = True,
     ) -> None:
-        super().__init__(send_area_to_processor, scale_and_offset, mask_clouds, dilate_mask, keep_ints)
+        super().__init__(
+            send_area_to_processor,
+            scale_and_offset,
+            mask_clouds,
+            dilate_mask,
+            keep_ints,
+        )
         self.num_threads = num_threads
         self.work_chunks = work_chunks
 
     def process(self, xr: DataArray) -> Dataset:
         xr = super().process(xr)
         data = xr.drop_vars(["SCL"])
-        geomad = geomedian_with_mads(data, num_threads=self.num_threads, work_chunks=self.work_chunks)
+        geomad = geomedian_with_mads(
+            data, num_threads=self.num_threads, work_chunks=self.work_chunks
+        )
         output = set_stac_properties(data, geomad)
         return output
 
@@ -97,7 +107,7 @@ def main(
         dilate_mask=True,
         work_chunks=(1801, 1801),
         num_threads=4,
-        keep_ints=True
+        keep_ints=True,
     )
 
     itempath = DepItemPath(base, dataset_id, version, datetime)
