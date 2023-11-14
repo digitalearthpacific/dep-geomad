@@ -6,7 +6,7 @@ from dep_tools.azure import get_container_client
 from dep_tools.loaders import LandsatOdcLoader
 from dep_tools.namers import DepItemPath
 from dep_tools.processors import LandsatProcessor
-from dep_tools.runner import run_by_area
+from dep_tools.runner import AreasRunner
 from dep_tools.s2_utils import S2Processor
 from dep_tools.stac_utils import set_stac_properties
 from dep_tools.writers import AzureDsWriter
@@ -14,6 +14,7 @@ from odc.algo import geomedian_with_mads
 from typing_extensions import Annotated
 from xarray import DataArray, Dataset
 import geopandas as gpd
+from dask.distributed import Client
 
 
 def get_grid() -> gpd.GeoDataFrame:
@@ -92,7 +93,6 @@ def main(
     base_product: str = "ls",
 ) -> None:
     grid = get_grid()
-    areas = grid.loc[[(region_code)]]
 
     loader = LandsatOdcLoader(
         epsg=3832,
@@ -109,14 +109,11 @@ def main(
         flat_array=True,
     )
 
-    input_data = loader.load(areas)
-    print("Found data")
-
     processor = GeoMADLandsatProcessor(
         scale_and_offset=False,
-        dilate_mask=True,
-        work_chunks=(1801, 1801),
-        num_threads=4,
+        dilate_mask=[2, 3],
+        work_chunks=(601, 601),
+        num_threads=10,
         keep_ints=True,
     )
 
@@ -124,9 +121,7 @@ def main(
 
     writer = AzureDsWriter(
         itempath=itempath,
-        convert_to_int16=True,
         overwrite=True,
-        output_value_multiplier=100,
         extra_attrs=dict(dep_version=version),
     )
     logger = CsvLogger(
@@ -137,14 +132,23 @@ def main(
         header="time|index|status|paths|comment\n",
     )
 
-    run_by_area(
-        areas=areas,
+    runner = AreasRunner(
+        grid,
         loader=loader,
         processor=processor,
         writer=writer,
         logger=logger,
-        continue_on_error=False,
     )
+
+    memory_limit = "24GB" if base_product == "ls" else "48GB"
+    with Client(n_workers=1, threads_per_worker=16, memory_limit=memory_limit):
+        paths = runner.run_one(region_code)
+
+    if paths is not None:
+        print(f"Completed writing to {paths[-1]}")
+    else:
+        print("ERROR: Failed to process...")
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":
