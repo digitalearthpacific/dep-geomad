@@ -13,8 +13,17 @@ from dep_tools.writers import AzureDsWriter
 from odc.algo import geomedian_with_mads
 from typing_extensions import Annotated
 from xarray import DataArray, Dataset
+import geopandas as gpd
 
-from src.grid import grid
+
+def get_grid() -> gpd.GeoDataFrame:
+    return (
+        gpd.read_file(
+            "https://raw.githubusercontent.com/digitalearthpacific/dep-grid/master/grid_pacific.geojson"
+        )
+        .astype({"tile_id": str, "country_code": str})
+        .set_index(["tile_id", "country_code"], drop=False)
+    )
 
 
 class GeoMADLandsatProcessor(LandsatProcessor):
@@ -23,7 +32,7 @@ class GeoMADLandsatProcessor(LandsatProcessor):
         send_area_to_processor: bool = False,
         scale_and_offset: bool = False,
         mask_clouds: bool = True,
-        dilate_mask: Tuple[int, int] | None = [3, 5],
+        dilate_mask: Tuple[int, int] | None = [2, 3],
         num_threads: int = 4,
         work_chunks: Tuple[int, int] = (1000, 1000),
         keep_ints: bool = True,
@@ -77,21 +86,18 @@ class GeoMADSentinelProcessor(S2Processor):
 
 def main(
     region_code: Annotated[str, typer.Option()],
-    region_index: Annotated[str, typer.Option()],
     datetime: Annotated[str, typer.Option()],
     version: Annotated[str, typer.Option()],
     dataset_id: str = "geomad",
-    base_product: str = "landsat",
+    base_product: str = "ls",
 ) -> None:
-    cell = grid.loc[[(region_code, region_index)]]
-
-    if base_product == "landsat":
-        base = "ls"
+    grid = get_grid()
+    areas = grid.loc[[(region_code)]]
 
     loader = LandsatOdcLoader(
         epsg=3832,
         datetime=datetime,
-        dask_chunksize=dict(band=1, time=1, x=4096, y=4096),
+        dask_chunksize=dict(time=1, x=4096, y=4096),
         odc_load_kwargs=dict(
             fail_on_error=False,
             resolution=30,
@@ -103,6 +109,9 @@ def main(
         flat_array=True,
     )
 
+    input_data = loader.load(areas)
+    print("Found data")
+
     processor = GeoMADLandsatProcessor(
         scale_and_offset=False,
         dilate_mask=True,
@@ -111,7 +120,7 @@ def main(
         keep_ints=True,
     )
 
-    itempath = DepItemPath(base, dataset_id, version, datetime)
+    itempath = DepItemPath(base_product, dataset_id, version, datetime)
 
     writer = AzureDsWriter(
         itempath=itempath,
@@ -129,7 +138,7 @@ def main(
     )
 
     run_by_area(
-        areas=cell,
+        areas=areas,
         loader=loader,
         processor=processor,
         writer=writer,

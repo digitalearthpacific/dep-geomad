@@ -8,7 +8,7 @@ from azure_logger import CsvLogger, filter_by_log
 from dep_tools.namers import DepItemPath
 from dep_tools.azure import get_container_client
 
-from grid import grid
+from run_task import get_grid
 
 
 def main(
@@ -17,8 +17,10 @@ def main(
     version: Annotated[str, typer.Option()],
     limit: Optional[str] = None,
     no_retry_errors: Optional[bool] = False,
-    dataset_id: str = "wofs",
+    dataset_id: str = "geomad",
+    base_product: str = "ls",
 ) -> None:
+    grid = get_grid()
     region_codes = None if regions.upper() == "ALL" else regions.split(",")
 
     # Makes a list no matter what
@@ -29,10 +31,10 @@ def main(
         ValueError(f"{datetime} is not a valid value for --datetime")
 
     grid_subset = (
-        grid.loc[grid.code.isin(region_codes)] if region_codes is not None else grid
+        grid.loc[grid.country_code.isin(region_codes)] if region_codes is not None else grid
     )
 
-    itempath = DepItemPath("ls", dataset_id, version, datetime)
+    itempath = DepItemPath(base_product, dataset_id, version, datetime)
     logger = CsvLogger(
         name=dataset_id,
         container_client=get_container_client(),
@@ -44,6 +46,7 @@ def main(
     grid_subset = filter_by_log(grid_subset, logger.parse_log(), not no_retry_errors)
     params = [
         {
+            "base-product": base_product,
             "region-code": region[0][0],
             "region-index": region[0][1],
             "datetime": region[1],
