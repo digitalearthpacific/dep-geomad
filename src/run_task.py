@@ -39,7 +39,11 @@ class GeoMADLandsatProcessor(LandsatProcessor):
         keep_ints: bool = True,
     ) -> None:
         super().__init__(
-            send_area_to_processor, scale_and_offset, mask_clouds, dilate_mask, keep_ints
+            send_area_to_processor,
+            scale_and_offset,
+            mask_clouds,
+            dilate_mask,
+            keep_ints,
         )
         self.num_threads = num_threads
         self.work_chunks = work_chunks
