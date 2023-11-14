@@ -22,13 +22,14 @@ class GeoMADLandsatProcessor(LandsatProcessor):
         self,
         send_area_to_processor: bool = False,
         scale_and_offset: bool = False,
-        dilate_mask: bool = True,
+        mask_clouds: bool = True,
+        dilate_mask: Tuple[int, int] | None = [3, 5],
         num_threads: int = 4,
         work_chunks: Tuple[int, int] = (1000, 1000),
         keep_ints: bool = True,
     ) -> None:
         super().__init__(
-            send_area_to_processor, scale_and_offset, dilate_mask, keep_ints
+            send_area_to_processor, scale_and_offset, mask_clouds, dilate_mask, keep_ints
         )
         self.num_threads = num_threads
         self.work_chunks = work_chunks
