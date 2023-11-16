@@ -1,20 +1,20 @@
 from typing import Tuple
 
+import geopandas as gpd
 import typer
 from azure_logger import CsvLogger
+from dask.distributed import Client
 from dep_tools.azure import get_container_client
 from dep_tools.loaders import LandsatOdcLoader
 from dep_tools.namers import DepItemPath
 from dep_tools.processors import LandsatProcessor
-from dep_tools.runner import AreasRunner
 from dep_tools.s2_utils import S2Processor
 from dep_tools.stac_utils import set_stac_properties
+from dep_tools.task import ErrorCategoryAreaTask
 from dep_tools.writers import AzureDsWriter
 from odc.algo import geomedian_with_mads
 from typing_extensions import Annotated
 from xarray import DataArray, Dataset
-import geopandas as gpd
-from dask.distributed import Client
 
 
 def get_grid() -> gpd.GeoDataFrame:
@@ -95,6 +95,9 @@ def main(
     version: Annotated[str, typer.Option()],
     dataset_id: str = "geomad",
     base_product: str = "ls",
+    memory_limit: str = "24GB",
+    n_workers: int = 1,
+    threads_per_worker: int = 16,
 ) -> None:
     grid = get_grid()
 
@@ -128,6 +131,10 @@ def main(
         overwrite=True,
         extra_attrs=dict(dep_version=version),
     )
+
+    # TODO: consider refactoring to use a normal logger
+    # and if we do, then changing the logic around checking
+    # if a tile is already done.
     logger = CsvLogger(
         name=dataset_id,
         container_client=get_container_client(),
@@ -136,16 +143,20 @@ def main(
         header="time|index|status|paths|comment\n",
     )
 
-    runner = AreasRunner(
-        grid,
+    runner = ErrorCategoryAreaTask(
+        id=region_code,
+        area=grid.loc[[region_code]],
         loader=loader,
         processor=processor,
         writer=writer,
         logger=logger,
     )
 
-    memory_limit = "24GB" if base_product == "ls" else "48GB"
-    with Client(n_workers=1, threads_per_worker=16, memory_limit=memory_limit):
+    with Client(
+        n_workers=n_workers,
+        threads_per_worker=threads_per_worker,
+        memory_limit=memory_limit,
+    ):
         paths = runner.run_one(region_code)
 
     if paths is not None:
