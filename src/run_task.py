@@ -15,6 +15,7 @@ from dep_tools.writers import AzureDsWriter
 from odc.algo import geomedian_with_mads
 from typing_extensions import Annotated
 from xarray import DataArray, Dataset
+import logging
 
 
 def get_grid() -> gpd.GeoDataFrame:
@@ -95,11 +96,14 @@ def main(
     version: Annotated[str, typer.Option()],
     dataset_id: str = "geomad",
     base_product: str = "ls",
-    memory_limit: str = "24GB",
-    n_workers: int = 1,
-    threads_per_worker: int = 16,
+    memory_limit_per_worker: str = "50GB",
+    n_workers: int = 2,
+    threads_per_worker: int = 32,
 ) -> None:
     grid = get_grid()
+    area = grid.loc[[region_code]]
+
+
 
     loader = LandsatOdcLoader(
         epsg=3832,
@@ -120,7 +124,7 @@ def main(
         scale_and_offset=False,
         dilate_mask=[2, 3],
         work_chunks=(601, 601),
-        num_threads=10,
+        num_threads=4,
         keep_ints=True,
     )
 
@@ -145,7 +149,7 @@ def main(
 
     runner = ErrorCategoryAreaTask(
         id=region_code,
-        area=grid.loc[[region_code]],
+        area=area,
         loader=loader,
         processor=processor,
         writer=writer,
@@ -155,9 +159,9 @@ def main(
     with Client(
         n_workers=n_workers,
         threads_per_worker=threads_per_worker,
-        memory_limit=memory_limit,
+        memory_limit=memory_limit_per_worker,
     ):
-        paths = runner.run_one(region_code)
+        paths = runner.run()
 
     if paths is not None:
         print(f"Completed writing to {paths[-1]}")
