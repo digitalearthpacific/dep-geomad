@@ -98,9 +98,15 @@ def main(
     memory_limit_per_worker: str = "50GB",
     n_workers: int = 2,
     threads_per_worker: int = 32,
+    all_bands: Annotated[bool, typer.Option()] = False,
+    overwrite: Annotated[bool, typer.Option()] = False,
 ) -> None:
     grid = get_grid()
     area = grid.loc[[region_code]]
+
+    bands = ["qa_pixel", "red", "green", "blue", "nir08", "swir16", "swir22"]
+    if not all_bands:
+        bands = ["qa_pixel", "red", "green", "blue"]
 
     loader = LandsatOdcLoader(
         epsg=3832,
@@ -109,7 +115,7 @@ def main(
         odc_load_kwargs=dict(
             fail_on_error=False,
             resolution=30,
-            bands=["qa_pixel", "red", "green", "blue", "nir08", "swir16", "swir22"],
+            bands=bands,
         ),
         exclude_platforms=["landsat-7"],
         only_tier_one=True,
@@ -130,7 +136,7 @@ def main(
 
     writer = AzureDsWriter(
         itempath=itempath,
-        overwrite=True,
+        overwrite=overwrite,
         convert_to_int16=False,
         extra_attrs=dict(dep_version=version),
     )
