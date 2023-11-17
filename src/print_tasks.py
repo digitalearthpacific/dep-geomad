@@ -5,8 +5,8 @@ from typing import Annotated, Optional
 
 import typer
 from azure_logger import CsvLogger, filter_by_log
-from dep_tools.namers import DepItemPath
 from dep_tools.azure import get_container_client
+from dep_tools.namers import DepItemPath
 
 from run_task import get_grid
 
@@ -16,9 +16,9 @@ def main(
     datetime: Annotated[str, typer.Option()],
     version: Annotated[str, typer.Option()],
     limit: Optional[str] = None,
-    no_retry_errors: Optional[bool] = False,
-    dataset_id: str = "geomad",
     base_product: str = "ls",
+    dataset_id: str = "geomad",
+    no_retry_errors: Optional[bool] = False,
 ) -> None:
     grid = get_grid()
     region_codes = None if regions.upper() == "ALL" else regions.split(",")
@@ -50,7 +50,6 @@ def main(
         {
             "base-product": base_product,
             "region-code": region[0][0],
-            "region-index": region[0][1],
             "datetime": region[1],
         }
         for region in product(grid_subset.index, years)

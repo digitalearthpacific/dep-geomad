@@ -100,6 +100,8 @@ def main(
     threads_per_worker: int = 64,
     all_bands: Annotated[bool, typer.Option()] = True,
     overwrite: Annotated[bool, typer.Option()] = False,
+    only_tier_one: Annotated[bool, typer.Option()] = True,
+    fall_back_to_tier_two: Annotated[bool, typer.Option()] = True,
 ) -> None:
     grid = get_grid()
     area = grid.loc[[region_code]]
@@ -118,7 +120,8 @@ def main(
             bands=bands,
         ),
         exclude_platforms=["landsat-7"],
-        only_tier_one=True,
+        only_tier_one=only_tier_one,
+        fall_back_to_tier_two=fall_back_to_tier_two,
         nodata_value=0,
         keep_ints=True,
         flat_array=True,
