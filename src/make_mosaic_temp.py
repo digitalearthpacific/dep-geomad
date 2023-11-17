@@ -6,7 +6,7 @@ from odc.stac import load
 from pystac import Item
 
 client = get_container_client()
-lazy_docs = list_blob_container(client, prefix='dep_ls_geomad/0-0-1/', suffix='.json')
+lazy_docs = list_blob_container(client, prefix="dep_ls_geomad/0-0-1/", suffix=".json")
 
 docs = [d for d in lazy_docs]
 print(f"Found {len(docs)} documents")
