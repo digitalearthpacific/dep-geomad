@@ -95,10 +95,10 @@ def main(
     version: Annotated[str, typer.Option()],
     dataset_id: str = "geomad",
     base_product: str = "ls",
-    memory_limit_per_worker: str = "50GB",
+    memory_limit_per_worker: str = "64GB",
     n_workers: int = 2,
-    threads_per_worker: int = 32,
-    all_bands: Annotated[bool, typer.Option()] = False,
+    threads_per_worker: int = 64,
+    all_bands: Annotated[bool, typer.Option()] = True,
     overwrite: Annotated[bool, typer.Option()] = False,
 ) -> None:
     grid = get_grid()
@@ -128,7 +128,7 @@ def main(
         scale_and_offset=False,
         dilate_mask=[2, 3],
         work_chunks=(601, 601),
-        num_threads=4,
+        num_threads=2,
         keep_ints=True,
     )
 
