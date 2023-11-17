@@ -15,7 +15,6 @@ from dep_tools.writers import AzureDsWriter
 from odc.algo import geomedian_with_mads
 from typing_extensions import Annotated
 from xarray import DataArray, Dataset
-import logging
 
 
 def get_grid() -> gpd.GeoDataFrame:
@@ -103,8 +102,6 @@ def main(
     grid = get_grid()
     area = grid.loc[[region_code]]
 
-
-
     loader = LandsatOdcLoader(
         epsg=3832,
         datetime=datetime,
@@ -115,6 +112,7 @@ def main(
             bands=["qa_pixel", "red", "green", "blue", "nir08", "swir16", "swir22"],
         ),
         exclude_platforms=["landsat-7"],
+        only_tier_one=True,
         nodata_value=0,
         keep_ints=True,
         flat_array=True,
@@ -133,6 +131,7 @@ def main(
     writer = AzureDsWriter(
         itempath=itempath,
         overwrite=True,
+        convert_to_int16=False,
         extra_attrs=dict(dep_version=version),
     )
 
