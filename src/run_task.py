@@ -7,8 +7,7 @@ from dask.distributed import Client
 from dep_tools.azure import get_container_client
 from dep_tools.loaders import LandsatOdcLoader
 from dep_tools.namers import DepItemPath
-from dep_tools.processors import LandsatProcessor
-from dep_tools.s2_utils import S2Processor
+from dep_tools.processors import LandsatProcessor, S2Processor
 from dep_tools.stac_utils import set_stac_properties
 from dep_tools.task import ErrorCategoryAreaTask
 from dep_tools.writers import AzureDsWriter
