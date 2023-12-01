@@ -33,17 +33,17 @@ class GeoMADLandsatProcessor(LandsatProcessor):
         send_area_to_processor: bool = False,
         scale_and_offset: bool = False,
         mask_clouds: bool = True,
-        dilate_mask: Tuple[int, int] | None = [2, 3],
         num_threads: int = 4,
         work_chunks: Tuple[int, int] = (1000, 1000),
+        filters: list | None = [("closing", 5), ("opening", 5)],
         keep_ints: bool = True,
     ) -> None:
         super().__init__(
             send_area_to_processor,
             scale_and_offset,
             mask_clouds,
-            dilate_mask,
-            keep_ints,
+            mask_clouds_kwargs={"filters": filters, "keep_ints": keep_ints},
+
         )
         self.num_threads = num_threads
         self.work_chunks = work_chunks
@@ -124,15 +124,15 @@ def main(
         fall_back_to_tier_two=fall_back_to_tier_two,
         nodata_value=0,
         keep_ints=True,
-        flat_array=True,
+        load_as_dataset=True,
     )
 
     processor = GeoMADLandsatProcessor(
         scale_and_offset=False,
-        dilate_mask=[2, 3],
         work_chunks=(601, 601),
         num_threads=2,
-        keep_ints=True,
+        filters=[("closing", 5), ("opening", 5)],
+        keep_ints=True
     )
 
     itempath = DepItemPath(base_product, dataset_id, version, datetime)
@@ -162,6 +162,7 @@ def main(
         processor=processor,
         writer=writer,
         logger=logger,
+        mutithreaded=True
     )
 
     with Client(
