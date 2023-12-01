@@ -57,23 +57,22 @@ class GeoMADLandsatProcessor(LandsatProcessor):
         return output
 
 
-class GeoMADSentinelProcessor(S2Processor):
+class GeoMADSentinel2Processor(S2Processor):
     def __init__(
         self,
         send_area_to_processor: bool = False,
         scale_and_offset: bool = False,
         mask_clouds: bool = True,
-        dilate_mask: bool = True,
         num_threads: int = 4,
         work_chunks: Tuple[int, int] = (1000, 1000),
+        filters: list | None = [("closing", 5), ("opening", 5)],
         keep_ints: bool = True,
     ) -> None:
         super().__init__(
             send_area_to_processor,
             scale_and_offset,
             mask_clouds,
-            dilate_mask,
-            keep_ints,
+            mask_clouds_kwargs={"filters": filters, "keep_ints": keep_ints},
         )
         self.num_threads = num_threads
         self.work_chunks = work_chunks
