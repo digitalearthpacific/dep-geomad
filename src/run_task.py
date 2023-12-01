@@ -141,6 +141,7 @@ def main(
         overwrite=overwrite,
         convert_to_int16=False,
         extra_attrs=dict(dep_version=version),
+        write_multithreaded=True,
     )
 
     # TODO: consider refactoring to use a normal logger
@@ -161,7 +162,6 @@ def main(
         processor=processor,
         writer=writer,
         logger=logger,
-        mutithreaded=True,
     )
 
     with Client(
