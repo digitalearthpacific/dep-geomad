@@ -43,7 +43,6 @@ class GeoMADLandsatProcessor(LandsatProcessor):
             scale_and_offset,
             mask_clouds,
             mask_clouds_kwargs={"filters": filters, "keep_ints": keep_ints},
-
         )
         self.num_threads = num_threads
         self.work_chunks = work_chunks
@@ -132,7 +131,7 @@ def main(
         work_chunks=(601, 601),
         num_threads=2,
         filters=[("closing", 5), ("opening", 5)],
-        keep_ints=True
+        keep_ints=True,
     )
 
     itempath = DepItemPath(base_product, dataset_id, version, datetime)
@@ -162,7 +161,7 @@ def main(
         processor=processor,
         writer=writer,
         logger=logger,
-        mutithreaded=True
+        mutithreaded=True,
     )
 
     with Client(
