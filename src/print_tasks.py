@@ -4,8 +4,7 @@ from itertools import product
 from typing import Annotated, Optional
 
 import typer
-from azure_logger import CsvLogger, filter_by_log
-from dep_tools.azure import get_container_client
+from dep_tools.azure import blob_exists
 from dep_tools.namers import DepItemPath
 
 from run_task import get_grid
@@ -18,10 +17,13 @@ def main(
     limit: Optional[str] = None,
     base_product: str = "ls",
     dataset_id: str = "geomad",
-    no_retry_errors: Optional[bool] = False,
+    overwrite: Optional[bool] = False,
 ) -> None:
     grid = get_grid()
     region_codes = None if regions.upper() == "ALL" else regions.split(",")
+
+    if limit is not None:
+        limit = int(limit)
 
     # Makes a list no matter what
     years = datetime.split("-")
@@ -30,35 +32,38 @@ def main(
     elif len(years) > 2:
         ValueError(f"{datetime} is not a valid value for --datetime")
 
-    grid_subset = (
-        grid.loc[grid.country_code.isin(region_codes)]
-        if region_codes is not None
-        else grid
-    )
+    # Filter by country codes if we have them
+    if region_codes is not None:
+        grid = grid.loc[grid.country_code.isin(region_codes)]
 
-    itempath = DepItemPath(base_product, dataset_id, version, datetime)
-    logger = CsvLogger(
-        name=dataset_id,
-        container_client=get_container_client(),
-        path=itempath.log_path(),
-        overwrite=False,
-        header="time|index|status|paths|comment\n",
-    )
-
-    grid_subset = filter_by_log(grid_subset, logger.parse_log(), not no_retry_errors)
-    params = [
+    tasks = [
         {
             "base-product": base_product,
             "region-code": region[0][0],
             "datetime": region[1],
         }
-        for region in product(grid_subset.index, years)
+        for region in product(grid.index, years)
     ]
 
-    if limit is not None:
-        params = params[0 : int(limit)]
+    valid_tasks = []
 
-    json.dump(params, sys.stdout)
+    # If we don't want to overwrite, then we should only run tasks that don't already exist
+    # i.e., they failed in the past or they're missing for some other reason
+    itempath = DepItemPath(base_product, dataset_id, version, datetime)
+    if not overwrite:
+        for task in tasks:
+            if not blob_exists(itempath.stac_path(task["region-code"])):
+                valid_tasks.append(task)
+            if len(valid_tasks) == limit:
+                break
+    else:
+        # If we are overwriting, we just keep going
+        pass
+
+    if limit is not None:
+        tasks = tasks[0 : limit]
+
+    json.dump(tasks, sys.stdout)
 
 
 if __name__ == "__main__":
