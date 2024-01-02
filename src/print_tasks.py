@@ -61,7 +61,7 @@ def main(
         pass
 
     if limit is not None:
-        tasks = tasks[0 : limit]
+        tasks = tasks[0:limit]
 
     json.dump(tasks, sys.stdout)
 

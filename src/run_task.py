@@ -19,7 +19,12 @@ def get_logger(region_code: str) -> Logger:
     """Set up a simple logger"""
     console = StreamHandler()
     time_format = "%Y-%m-%d %H:%M:%S"
-    console.setFormatter(Formatter(fmt=f"%(asctime)s %(levelname)s ({region_code}):  %(message)s", datefmt=time_format))
+    console.setFormatter(
+        Formatter(
+            fmt=f"%(asctime)s %(levelname)s ({region_code}):  %(message)s",
+            datefmt=time_format,
+        )
+    )
 
     log = getLogger("GEOMAD")
     log.addHandler(console)
@@ -64,9 +69,7 @@ class GeoMADProcessor(Processor):
     def process(self, xr: DataArray) -> Dataset:
         xr = super().process(xr)
         data = xr.drop_vars(self.drop_vars)
-        geomad = geomedian_with_mads(
-            data, **self.geomad_options
-        )
+        geomad = geomedian_with_mads(data, **self.geomad_options)
         output = set_stac_properties(data, geomad)
         return output
 
@@ -136,10 +139,21 @@ def main(
         ProcessorClass = GeoMADLandsatProcessor
     elif base_product == "s2":
         log.info("Configuring Sentinel-2 process")
-        bands = ["SCL", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B11", "B12"]
+        bands = [
+            "SCL",
+            "B02",
+            "B03",
+            "B04",
+            "B05",
+            "B06",
+            "B07",
+            "B08",
+            "B8A",
+            "B11",
+            "B12",
+        ]
         if not all_bands:
             bands = ["SCL", "red", "green", "blue"]
-
 
         loader = Sentinel2OdcLoader(
             epsg=3832,
@@ -169,7 +183,7 @@ def main(
             num_threads=2,
             work_chunks=(601, 601),
             maxiters=100,
-        )
+        ),
     )
 
     log.info("Configuring writer")
@@ -180,7 +194,6 @@ def main(
         extra_attrs=dict(dep_version=version),
         write_multithreaded=True,
     )
-
 
     runner = SimpleLoggingAreaTask(
         id=region_code,
