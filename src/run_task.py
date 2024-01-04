@@ -126,6 +126,7 @@ def main(
     memory_limit_per_worker: str = "50GB",
     n_workers: int = 2,
     threads_per_worker: int = 32,
+    xy_chunk_size: int = 4096,
     all_bands: Annotated[bool, typer.Option()] = True,
     overwrite: Annotated[bool, typer.Option()] = False,
     only_tier_one: Annotated[bool, typer.Option()] = True,
@@ -153,7 +154,7 @@ def main(
     common_load_args = dict(
         epsg=3832,
         datetime=datetime,
-        dask_chunksize=dict(time=1, x=4096, y=4096),
+        dask_chunksize=dict(time=1, x=xy_chunk_size, y=xy_chunk_size),
         nodata_value=0,
         keep_ints=True,
         load_as_dataset=True,
