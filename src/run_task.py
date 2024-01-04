@@ -56,7 +56,7 @@ class GeoMADProcessor(Processor):
         },
         filters: list | None = [("closing", 5), ("opening", 5)],
         keep_ints: bool = True,
-        drop_vars: list[str] = ["SCL"],
+        drop_vars: list[str] = [],
     ) -> None:
         super().__init__(
             send_area_to_processor,
@@ -76,13 +76,13 @@ class GeoMADProcessor(Processor):
 
 
 class GeoMADSentinel2Processor(GeoMADProcessor, S2Processor):
-    def __init__(self, **kwargs) -> None:
-        super(GeoMADSentinel2Processor, self).__init__(**kwargs)
+    def __init__(self, drop_vars=["SCL"], **kwargs) -> None:
+        super(GeoMADSentinel2Processor, self).__init__(drop_vars=drop_vars, **kwargs)
 
 
 class GeoMADLandsatProcessor(GeoMADProcessor, LandsatProcessor):
-    def __init__(self, **kwargs) -> None:
-        super(GeoMADLandsatProcessor, self).__init__(**kwargs)
+    def __init__(self, drop_vars=["qa_pixel"], **kwargs) -> None:
+        super(GeoMADLandsatProcessor, self).__init__(drop_vars=drop_vars, **kwargs)
 
 
 def main(
@@ -135,13 +135,14 @@ def main(
         if not all_bands:
             bands = ["qa_pixel", "red", "green", "blue"]
 
-        odc_load_kwargs = dict(
-            fail_on_error=False, resolution=resolution, groupby="solar_day", bands=bands
-        )
-
         loader = LandsatOdcLoader(
             **common_load_args,
-            odc_load_kwargs=odc_load_kwargs,
+            odc_load_kwargs=dict(
+                fail_on_error=False,
+                resolution=resolution,
+                groupby="solar_day",
+                bands=bands,
+            ),
             exclude_platforms=["landsat-7"],
             only_tier_one=only_tier_one,
             fall_back_to_tier_two=fall_back_to_tier_two,
@@ -165,23 +166,18 @@ def main(
             "B12",
         ]
         if not all_bands:
-            bands = ["SCL", "red", "green", "blue"]
+            bands = ["SCL", "B04", "B03", "B02"]
 
-        odc_load_kwargs = (
-            dict(
+        loader = Sentinel2OdcLoader(
+            **common_load_args,
+            odc_load_kwargs=dict(
                 fail_on_error=False,
                 resolution=resolution,
                 groupby="solar_day",
                 bands=bands,
             ),
         )
-
-        loader = Sentinel2OdcLoader(
-            **common_load_args,
-            odc_load_kwargs=odc_load_kwargs,
-        )
         ProcessorClass = GeoMADSentinel2Processor
-
     else:
         raise Exception("Only LS is supported at the moment")
 
