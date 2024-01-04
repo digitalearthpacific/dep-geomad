@@ -1,12 +1,13 @@
+from logging import INFO, Formatter, Logger, StreamHandler, getLogger
+
 import geopandas as gpd
 import typer
-
-from logging import Logger, getLogger, StreamHandler, INFO, Formatter
 from dask.distributed import Client
 from dep_tools.azure import blob_exists
+from dep_tools.exceptions import EmptyCollectionError
 from dep_tools.loaders import LandsatOdcLoader, Sentinel2OdcLoader
 from dep_tools.namers import DepItemPath
-from dep_tools.processors import Processor, LandsatProcessor, S2Processor
+from dep_tools.processors import LandsatProcessor, Processor, S2Processor
 from dep_tools.stac_utils import set_stac_properties
 from dep_tools.task import SimpleLoggingAreaTask
 from dep_tools.writers import AzureDsWriter
@@ -113,6 +114,24 @@ def main(
         # This is an exit with success
         raise typer.Exit()
 
+    resolution = 10
+    if base_product == "ls":
+        resolution = 30
+
+    common_load_args = dict(
+        epsg=3832,
+        datetime=datetime,
+        dask_chunksize=dict(time=1, x=4096, y=4096),
+        odc_load_kwargs=dict(
+            fail_on_error=False,
+            resolution=resolution,
+            groupby="solar_day",
+        ),
+        nodata_value=0,
+        keep_ints=True,
+        load_as_dataset=True,
+    )
+
     if base_product == "ls":
         log.info("Configuring Landsat process")
         bands = ["qa_pixel", "red", "green", "blue", "nir08", "swir16", "swir22"]
@@ -120,21 +139,11 @@ def main(
             bands = ["qa_pixel", "red", "green", "blue"]
 
         loader = LandsatOdcLoader(
-            epsg=3832,
-            datetime=datetime,
-            dask_chunksize=dict(time=1, x=4096, y=4096),
-            odc_load_kwargs=dict(
-                fail_on_error=False,
-                resolution=30,
-                bands=bands,
-                groupby="solar_day",
-            ),
+            **common_load_args,
+            bands=bands,
             exclude_platforms=["landsat-7"],
             only_tier_one=only_tier_one,
             fall_back_to_tier_two=fall_back_to_tier_two,
-            nodata_value=0,
-            keep_ints=True,
-            load_as_dataset=True,
         )
         ProcessorClass = GeoMADLandsatProcessor
     elif base_product == "s2":
@@ -156,18 +165,8 @@ def main(
             bands = ["SCL", "red", "green", "blue"]
 
         loader = Sentinel2OdcLoader(
-            epsg=3832,
-            datetime=datetime,
-            dask_chunksize=dict(time=1, x=4096, y=4096),
-            odc_load_kwargs=dict(
-                fail_on_error=False,
-                resolution=10,
-                bands=bands,
-                groupby="solar_day",
-            ),
-            nodata_value=0,
-            keep_ints=True,
-            load_as_dataset=True,
+            **common_load_args,
+            bands=bands,
         )
         ProcessorClass = GeoMADSentinel2Processor
 
@@ -212,6 +211,8 @@ def main(
         try:
             paths = runner.run()
             log.info(f"Completed writing to {paths[-1]}")
+        except EmptyCollectionError:
+            log.warning("No data found for this tile.")
         except Exception as e:
             log.exception(f"Failed to process {region_code} with error: {e}")
             raise typer.Exit(code=1)

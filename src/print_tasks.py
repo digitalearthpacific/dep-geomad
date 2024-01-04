@@ -17,7 +17,7 @@ def main(
     limit: Optional[str] = None,
     base_product: str = "ls",
     dataset_id: str = "geomad",
-    overwrite: Optional[bool] = False,
+    overwrite: Annotated[bool, typer.Option()] = False,
 ) -> None:
     grid = get_grid()
     region_codes = None if regions.upper() == "ALL" else regions.split(",")
@@ -56,6 +56,8 @@ def main(
                 valid_tasks.append(task)
             if len(valid_tasks) == limit:
                 break
+        # Switch to this list of tasks, which has been filtered
+        tasks = valid_tasks
     else:
         # If we are overwriting, we just keep going
         pass
