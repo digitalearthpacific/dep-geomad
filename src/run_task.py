@@ -9,7 +9,9 @@ from dep_tools.loaders import LandsatOdcLoader, Sentinel2OdcLoader
 from dep_tools.namers import DepItemPath
 from dep_tools.processors import LandsatProcessor, Processor, S2Processor
 from dep_tools.stac_utils import set_stac_properties
-from dep_tools.task import SimpleLoggingAreaTask
+
+# from dep_tools.task import SimpleLoggingAreaTask
+from dep_tools.task import AreaTask
 from dep_tools.writers import AzureDsWriter
 from odc.algo import geomedian_with_mads
 from typing_extensions import Annotated
@@ -41,6 +43,36 @@ def get_grid() -> gpd.GeoDataFrame:
         .astype({"tile_id": str, "country_code": str})
         .set_index(["tile_id", "country_code"], drop=False)
     )
+
+
+class SimpleLoggingAreaTask(AreaTask):
+    def run(self, load_data_before_writing=False):
+        self.logger.info("Preparing to load data")
+        input_data = self.loader.load(self.area)
+        self.logger.info(f"Found {len(input_data.time)} timesteps to load")
+
+        self.logger.info("Preparing to process data")
+        processor_kwargs = {}
+        if self.processor.send_area_to_processor:
+            processor_kwargs["area"] = self.area
+        output_data = self.processor.process(input_data, **processor_kwargs)
+        self.logger.info(
+            f"Processed data will have a result of shape: {[output_data.dims[d] for d in ['x', 'y']]}"
+        )
+
+        if load_data_before_writing:
+            self.logger.info("Loading data into memory and processing")
+            output_data = output_data.compute()
+            self.logger.info("Data processed and loaded")
+
+            self.logger.info("Writing data")
+        else:
+            self.logger.info("Processing and writing data...")
+
+        paths = self.writer.write(output_data, self.id)
+        self.logger.info(f"Succesfully wrote data to {len(paths)} paths")
+
+        return paths
 
 
 class GeoMADProcessor(Processor):
@@ -217,7 +249,7 @@ def main(
         memory_limit=memory_limit_per_worker,
     ):
         try:
-            paths = runner.run()
+            paths = runner.run(load_data_before_writing=True)
             log.info(f"Completed writing to {paths[-1]}")
         except EmptyCollectionError:
             log.warning("No data found for this tile.")
@@ -227,4 +259,5 @@ def main(
 
 
 if __name__ == "__main__":
+    typer.run(main)
     typer.run(main)
