@@ -45,12 +45,11 @@ def main(
         for region in product(grid.index, years)
     ]
 
-    valid_tasks = []
-
     # If we don't want to overwrite, then we should only run tasks that don't already exist
     # i.e., they failed in the past or they're missing for some other reason
     itempath = DepItemPath(base_product, dataset_id, version, datetime)
     if not overwrite:
+        valid_tasks = []
         for task in tasks:
             if not blob_exists(itempath.stac_path(task["region-code"])):
                 valid_tasks.append(task)

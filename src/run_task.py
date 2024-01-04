@@ -122,11 +122,6 @@ def main(
         epsg=3832,
         datetime=datetime,
         dask_chunksize=dict(time=1, x=4096, y=4096),
-        odc_load_kwargs=dict(
-            fail_on_error=False,
-            resolution=resolution,
-            groupby="solar_day",
-        ),
         nodata_value=0,
         keep_ints=True,
         load_as_dataset=True,
@@ -134,13 +129,22 @@ def main(
 
     if base_product == "ls":
         log.info("Configuring Landsat process")
+
+        resolution = 30
         bands = ["qa_pixel", "red", "green", "blue", "nir08", "swir16", "swir22"]
         if not all_bands:
             bands = ["qa_pixel", "red", "green", "blue"]
 
+        odc_load_kwargs = dict(
+            fail_on_error=False,
+            resolution=resolution,
+            groupby="solar_day",
+            bands=bands
+        )
+
         loader = LandsatOdcLoader(
             **common_load_args,
-            bands=bands,
+            odc_load_kwargs=odc_load_kwargs,
             exclude_platforms=["landsat-7"],
             only_tier_one=only_tier_one,
             fall_back_to_tier_two=fall_back_to_tier_two,
@@ -148,6 +152,8 @@ def main(
         ProcessorClass = GeoMADLandsatProcessor
     elif base_product == "s2":
         log.info("Configuring Sentinel-2 process")
+
+        resolution = 10
         bands = [
             "SCL",
             "B02",
@@ -164,9 +170,16 @@ def main(
         if not all_bands:
             bands = ["SCL", "red", "green", "blue"]
 
+        odc_load_kwargs = dict(
+            fail_on_error=False,
+            resolution=resolution,
+            groupby="solar_day",
+            bands=bands
+        ),
+
         loader = Sentinel2OdcLoader(
             **common_load_args,
-            bands=bands,
+            odc_load_kwargs=odc_load_kwargs,
         )
         ProcessorClass = GeoMADSentinel2Processor
 
