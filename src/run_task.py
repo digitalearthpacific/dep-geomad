@@ -136,10 +136,7 @@ def main(
             bands = ["qa_pixel", "red", "green", "blue"]
 
         odc_load_kwargs = dict(
-            fail_on_error=False,
-            resolution=resolution,
-            groupby="solar_day",
-            bands=bands
+            fail_on_error=False, resolution=resolution, groupby="solar_day", bands=bands
         )
 
         loader = LandsatOdcLoader(
@@ -170,12 +167,14 @@ def main(
         if not all_bands:
             bands = ["SCL", "red", "green", "blue"]
 
-        odc_load_kwargs = dict(
-            fail_on_error=False,
-            resolution=resolution,
-            groupby="solar_day",
-            bands=bands
-        ),
+        odc_load_kwargs = (
+            dict(
+                fail_on_error=False,
+                resolution=resolution,
+                groupby="solar_day",
+                bands=bands,
+            ),
+        )
 
         loader = Sentinel2OdcLoader(
             **common_load_args,
