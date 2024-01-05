@@ -11,7 +11,7 @@ from dep_tools.processors import LandsatProcessor, Processor, S2Processor
 from dep_tools.stac_utils import set_stac_properties
 
 # from dep_tools.task import SimpleLoggingAreaTask
-from dep_tools.task import AreaTask
+from dep_tools.task import SimpleLoggingAreaTask
 from dep_tools.writers import AzureDsWriter
 from odc.algo import geomedian_with_mads
 from typing_extensions import Annotated
@@ -45,42 +45,13 @@ def get_grid() -> gpd.GeoDataFrame:
     )
 
 
-class SimpleLoggingAreaTask(AreaTask):
-    def run(self, load_data_before_writing=False):
-        self.logger.info("Preparing to load data")
-        input_data = self.loader.load(self.area)
-        self.logger.info(f"Found {len(input_data.time)} timesteps to load")
-
-        self.logger.info("Preparing to process data")
-        processor_kwargs = {}
-        if self.processor.send_area_to_processor:
-            processor_kwargs["area"] = self.area
-        output_data = self.processor.process(input_data, **processor_kwargs)
-        self.logger.info(
-            f"Processed data will have a result of shape: {[output_data.dims[d] for d in ['x', 'y']]}"
-        )
-
-        if load_data_before_writing:
-            self.logger.info("Loading data into memory and processing")
-            output_data = output_data.compute()
-            self.logger.info("Data processed and loaded")
-
-            self.logger.info("Writing data")
-        else:
-            self.logger.info("Processing and writing data...")
-
-        paths = self.writer.write(output_data, self.id)
-        self.logger.info(f"Succesfully wrote data to {len(paths)} paths")
-
-        return paths
-
-
 class GeoMADProcessor(Processor):
     def __init__(
         self,
         send_area_to_processor: bool = False,
         scale_and_offset: bool = False,
         mask_clouds: bool = True,
+        load_data_before_writing: bool = True,
         geomad_options: dict = {
             "num_threads": 4,
             "work_chunks": (1000, 1000),
@@ -96,6 +67,7 @@ class GeoMADProcessor(Processor):
             mask_clouds,
             mask_clouds_kwargs={"filters": filters, "keep_ints": keep_ints},
         )
+        self.load_data_before_writing = load_data_before_writing
         self.geomad_options = geomad_options
         self.drop_vars = drop_vars
 
@@ -103,6 +75,10 @@ class GeoMADProcessor(Processor):
         xr = super().process(xr)
         data = xr.drop_vars(self.drop_vars)
         geomad = geomedian_with_mads(data, **self.geomad_options)
+
+        if self.load_data_before_writing:
+            geomad = geomad.compute()
+
         output = set_stac_properties(data, geomad)
         return output
 
@@ -127,6 +103,7 @@ def main(
     n_workers: int = 2,
     threads_per_worker: int = 32,
     xy_chunk_size: int = 4096,
+    geomad_threads: int = 10,
     all_bands: Annotated[bool, typer.Option()] = True,
     overwrite: Annotated[bool, typer.Option()] = False,
     only_tier_one: Annotated[bool, typer.Option()] = True,
@@ -219,8 +196,9 @@ def main(
         scale_and_offset=False,
         filters=[("closing", 5), ("opening", 5)],
         keep_ints=True,
+        load_data_before_writing=True,
         geomad_options=dict(
-            num_threads=2,
+            num_threads=geomad_threads,
             work_chunks=(601, 601),
             maxiters=100,
         ),
@@ -250,7 +228,7 @@ def main(
         memory_limit=memory_limit_per_worker,
     ):
         try:
-            paths = runner.run(load_data_before_writing=True)
+            paths = runner.run()
             log.info(f"Completed writing to {paths[-1]}")
         except EmptyCollectionError:
             log.warning("No data found for this tile.")
