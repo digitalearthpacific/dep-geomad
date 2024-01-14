@@ -115,7 +115,9 @@ def main(
     log = get_logger(region_code)
     log.info(f"Starting processing for {region_code}")
 
-    itempath = DepItemPath(base_product, dataset_id, version, datetime)
+    itempath = DepItemPath(
+        base_product, dataset_id, version, datetime, zero_pad_numbers=True
+    )
     stac_document = itempath.stac_path(region_code)
 
     # If we don't want to overwrite, and the destination file already exists, skip it
