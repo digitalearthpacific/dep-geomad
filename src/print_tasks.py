@@ -47,11 +47,12 @@ def main(
 
     # If we don't want to overwrite, then we should only run tasks that don't already exist
     # i.e., they failed in the past or they're missing for some other reason
-    itempath = DepItemPath(base_product, dataset_id, version, datetime)
+    itempath = DepItemPath(base_product, dataset_id, version, datetime, zero_pad_numbers=True)
     if not overwrite:
         valid_tasks = []
         for task in tasks:
-            if not blob_exists(itempath.stac_path(task["region-code"])):
+            stac_path = itempath.stac_path(task["region-code"])
+            if not blob_exists(stac_path):
                 valid_tasks.append(task)
             if len(valid_tasks) == limit:
                 break
