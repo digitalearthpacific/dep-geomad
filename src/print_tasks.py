@@ -47,7 +47,9 @@ def main(
 
     # If we don't want to overwrite, then we should only run tasks that don't already exist
     # i.e., they failed in the past or they're missing for some other reason
-    itempath = DepItemPath(base_product, dataset_id, version, datetime, zero_pad_numbers=True)
+    itempath = DepItemPath(
+        base_product, dataset_id, version, datetime, zero_pad_numbers=True
+    )
     if not overwrite:
         valid_tasks = []
         for task in tasks:
