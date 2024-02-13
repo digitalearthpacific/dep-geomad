@@ -242,13 +242,19 @@ def main(
         memory_limit=memory_limit_per_worker,
     ):
         try:
-            paths = runner.run()
+            paths = runner.run(min_timesteps=5)
             log.info(f"Completed writing to {paths[-1]}")
         except EmptyCollectionError:
             log.warning("No data found for this tile.")
         except Exception as e:
             log.exception(f"Failed to process {region_code} with error: {e}")
             raise typer.Exit(code=1)
+
+        log.info(f"Completed processing for {region_code}")
+        if len(paths) > 0:
+            log.info(f"Item written to {stac_document}")
+        else:
+            log.warning("Nothing written")
 
 
 if __name__ == "__main__":
