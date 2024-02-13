@@ -17,6 +17,20 @@ from odc.algo import geomedian_with_mads
 from typing_extensions import Annotated
 from xarray import DataArray, Dataset
 
+S2_BANDS = [
+    "SCL",
+    "B02",
+    "B03",
+    "B04",
+    "B05",
+    "B06",
+    "B07",
+    "B08",
+    "B8A",
+    "B11",
+    "B12",
+]
+
 
 def get_logger(region_code: str) -> Logger:
     """Set up a simple logger"""
@@ -167,21 +181,10 @@ def main(
         log.info("Configuring Sentinel-2 process")
 
         resolution = 10
-        bands = [
-            "SCL",
-            "B02",
-            "B03",
-            "B04",
-            "B05",
-            "B06",
-            "B07",
-            "B08",
-            "B8A",
-            "B11",
-            "B12",
-        ]
         if not all_bands:
             bands = ["SCL", "B04", "B03", "B02"]
+        else:
+            bands = S2_BANDS
 
         loader = Sentinel2OdcLoader(
             **common_load_args,
@@ -190,6 +193,11 @@ def main(
                 resolution=resolution,
                 groupby="solar_day",
                 bands=bands,
+                stac_cfg={
+                    "sentinel-2-l2a": {
+                        "assets": {"*": {"nodata": 0, "data_type": "uint16"}}
+                    }
+                },
             ),
         )
         ProcessorClass = GeoMADSentinel2Processor
