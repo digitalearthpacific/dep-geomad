@@ -244,7 +244,6 @@ def main(
     ):
         try:
             paths = runner.run(min_timesteps=5)
-            log.info(f"Completed writing to {paths[-1]}")
         except EmptyCollectionError:
             log.warning("No data found for this tile.")
         except Exception as e:
