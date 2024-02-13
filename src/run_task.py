@@ -236,6 +236,7 @@ def main(
         logger=log,
     )
 
+    paths = []
     with Client(
         n_workers=n_workers,
         threads_per_worker=threads_per_worker,
