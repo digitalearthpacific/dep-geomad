@@ -50,6 +50,7 @@ class GeoMADProcessor(Processor):
         self,
         send_area_to_processor: bool = False,
         scale_and_offset: bool = False,
+        harmonize_to_old: bool = True,
         mask_clouds: bool = True,
         load_data_before_writing: bool = True,
         geomad_options: dict = {
@@ -67,6 +68,8 @@ class GeoMADProcessor(Processor):
             mask_clouds,
             mask_clouds_kwargs={"filters": filters, "keep_ints": keep_ints},
         )
+        self.scale_and_offset = scale_and_offset
+        self.harmonize_to_old = harmonize_to_old
         self.load_data_before_writing = load_data_before_writing
         self.geomad_options = geomad_options
         self.drop_vars = drop_vars
@@ -195,7 +198,8 @@ def main(
 
     log.info("Configuring processor")
     processor = ProcessorClass(
-        scale_and_offset=False,
+        scale_and_offset=False,  # Don't want to work with floats
+        harmonize_to_old=True,  # This only applies to S-2
         filters=[("closing", 5), ("opening", 5)],
         keep_ints=True,
         load_data_before_writing=True,
