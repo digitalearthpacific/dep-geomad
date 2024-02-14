@@ -67,6 +67,7 @@ class GeoMADProcessor(Processor):
         harmonize_to_old: bool = True,
         mask_clouds: bool = True,
         load_data_before_writing: bool = True,
+        min_timesteps: int = 0,
         geomad_options: dict = {
             "num_threads": 4,
             "work_chunks": (1000, 1000),
@@ -85,10 +86,17 @@ class GeoMADProcessor(Processor):
         self.scale_and_offset = scale_and_offset
         self.harmonize_to_old = harmonize_to_old
         self.load_data_before_writing = load_data_before_writing
+        self.min_timesteps = min_timesteps
         self.geomad_options = geomad_options
         self.drop_vars = drop_vars
 
     def process(self, xr: DataArray) -> Dataset:
+        # Raise an exception if there's not enough data
+        if xr.time.size < self.min_timesteps:
+            raise EmptyCollectionError(
+                f"{xr.time.size} is less than the minimum {self.min_timesteps} timesteps"
+            )
+
         xr = super().process(xr)
         data = xr.drop_vars(self.drop_vars)
         geomad = geomedian_with_mads(data, **self.geomad_options)
@@ -211,6 +219,7 @@ def main(
         filters=[("closing", 5), ("opening", 5)],
         keep_ints=True,
         load_data_before_writing=True,
+        min_timesteps=5,
         geomad_options=dict(
             num_threads=geomad_threads,
             work_chunks=(601, 601),
@@ -243,9 +252,9 @@ def main(
         memory_limit=memory_limit_per_worker,
     ):
         try:
-            paths = runner.run(min_timesteps=5)
-        except EmptyCollectionError:
-            log.warning("No data found for this tile.")
+            paths = runner.run()
+        except EmptyCollectionError as e:
+            log.warning(f"No data found for this tile. Exception was {e}.")
         except Exception as e:
             log.exception(f"Failed to process {region_code} with error: {e}")
             raise typer.Exit(code=1)
@@ -258,5 +267,4 @@ def main(
 
 
 if __name__ == "__main__":
-    typer.run(main)
     typer.run(main)
