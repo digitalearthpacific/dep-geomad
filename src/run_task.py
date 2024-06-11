@@ -1,21 +1,16 @@
 from logging import INFO, Formatter, Logger, StreamHandler, getLogger
 
-import geopandas as gpd
 import typer
 from dask.distributed import Client
 from dep_tools.azure import blob_exists
 from dep_tools.exceptions import EmptyCollectionError
 from dep_tools.loaders import LandsatOdcLoader, Sentinel2OdcLoader
 from dep_tools.namers import DepItemPath
-from dep_tools.processors import LandsatProcessor, Processor, S2Processor
-from dep_tools.stac_utils import set_stac_properties
-
-# from dep_tools.task import SimpleLoggingAreaTask
 from dep_tools.task import SimpleLoggingAreaTask
 from dep_tools.writers import AzureDsWriter
-from odc.algo import geomedian_with_mads
 from typing_extensions import Annotated
-from xarray import DataArray, Dataset
+
+from utils import GeoMADLandsatProcessor, GeoMADSentinel2Processor
 
 S2_BANDS = [
     "SCL",
@@ -47,75 +42,6 @@ def get_logger(region_code: str) -> Logger:
     log.addHandler(console)
     log.setLevel(INFO)
     return log
-
-
-def get_grid() -> gpd.GeoDataFrame:
-    return (
-        gpd.read_file(
-            "https://raw.githubusercontent.com/digitalearthpacific/dep-grid/master/grid_pacific.geojson"
-        )
-        .astype({"tile_id": str, "country_code": str})
-        .set_index(["tile_id", "country_code"], drop=False)
-    )
-
-
-class GeoMADProcessor(Processor):
-    def __init__(
-        self,
-        send_area_to_processor: bool = False,
-        scale_and_offset: bool = False,
-        harmonize_to_old: bool = True,
-        mask_clouds: bool = True,
-        load_data_before_writing: bool = True,
-        min_timesteps: int = 0,
-        geomad_options: dict = {
-            "num_threads": 4,
-            "work_chunks": (1000, 1000),
-            "maxiters": 1000,
-        },
-        filters: list | None = [("closing", 5), ("opening", 5)],
-        keep_ints: bool = True,
-        drop_vars: list[str] = [],
-    ) -> None:
-        super().__init__(
-            send_area_to_processor,
-            scale_and_offset,
-            mask_clouds,
-            mask_clouds_kwargs={"filters": filters, "keep_ints": keep_ints},
-        )
-        self.scale_and_offset = scale_and_offset
-        self.harmonize_to_old = harmonize_to_old
-        self.load_data_before_writing = load_data_before_writing
-        self.min_timesteps = min_timesteps
-        self.geomad_options = geomad_options
-        self.drop_vars = drop_vars
-
-    def process(self, xr: DataArray) -> Dataset:
-        # Raise an exception if there's not enough data
-        if xr.time.size < self.min_timesteps:
-            raise EmptyCollectionError(
-                f"{xr.time.size} is less than the minimum {self.min_timesteps} timesteps"
-            )
-
-        xr = super().process(xr)
-        data = xr.drop_vars(self.drop_vars)
-        geomad = geomedian_with_mads(data, **self.geomad_options)
-
-        if self.load_data_before_writing:
-            geomad = geomad.compute()
-
-        output = set_stac_properties(data, geomad)
-        return output
-
-
-class GeoMADSentinel2Processor(GeoMADProcessor, S2Processor):
-    def __init__(self, drop_vars=["SCL"], **kwargs) -> None:
-        super(GeoMADSentinel2Processor, self).__init__(drop_vars=drop_vars, **kwargs)
-
-
-class GeoMADLandsatProcessor(GeoMADProcessor, LandsatProcessor):
-    def __init__(self, drop_vars=["qa_pixel"], **kwargs) -> None:
-        super(GeoMADLandsatProcessor, self).__init__(drop_vars=drop_vars, **kwargs)
 
 
 def main(
