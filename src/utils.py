@@ -1,10 +1,11 @@
+from datacube_compute import geomedian_with_mads
 from dep_tools.exceptions import EmptyCollectionError
 from dep_tools.processors import LandsatProcessor, Processor, S2Processor
 from dep_tools.s2_utils import mask_clouds
 from dep_tools.stac_utils import set_stac_properties
 from dep_tools.utils import scale_and_offset
 from geopandas import GeoDataFrame, read_file
-from odc.algo import erase_bad, geomedian_with_mads, mask_cleanup
+from odc.algo import erase_bad, mask_cleanup
 from xarray import DataArray, Dataset
 
 

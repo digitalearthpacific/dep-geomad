@@ -61,7 +61,7 @@ def main(
     memory_limit_per_worker: str = "50GB",
     n_workers: int = 2,
     threads_per_worker: int = 32,
-    xy_chunk_size: int = 4096,
+    xy_chunk_size: int = 3201,
     geomad_threads: int = 10,
     decimated: bool = False,
     all_bands: Annotated[bool, typer.Option()] = True,
@@ -98,11 +98,6 @@ def main(
         # This is an exit with success
         raise typer.Exit()
 
-    dict(
-        datetime=datetime,
-        dask_chunksize=dict(time=1, x=xy_chunk_size, y=xy_chunk_size),
-    )
-
     if base_product == "ls":
         raise Exception("Only S2 is supported at the moment")
 
@@ -134,7 +129,7 @@ def main(
         catalog = "https://earth-search.aws.element84.com/v1/"
         collection = "sentinel-2-c1-l2a"
         ProcessorClass = GeoMADAWSSentinel2Processor
-        chunks = dict(time=1, x=3201, y=3201)
+        chunks = dict(time=1, x=xy_chunk_size, y=xy_chunk_size)
         drop_vars = ["cloud"]
     else:
         raise Exception("Only LS is supported at the moment")

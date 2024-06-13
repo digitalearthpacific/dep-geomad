@@ -8,7 +8,7 @@ spec:
   podGC:
     strategy: OnWorkflowSuccess
     deleteDelayDuration: 600s
-  parallelism: 20
+  parallelism: 1
   workflowMetadata:
     labels:
       app: s2_geomad
@@ -22,8 +22,6 @@ spec:
         value: "s2"
       - name: image-tag
         value: "0.2.0" # The Docker image and code version
-      - name: memory-limit-per-worker
-        value: "240GB" # Dask's memory limit per worker.
       - name: bucket
         value: "dep-public-test" # The bucket to store the data
       - name: overwrite
@@ -62,8 +60,6 @@ spec:
                   value: "{{item.year}}"
                 - name: version
                   value: "{{ workflow.parameters.version }}"
-                - name: memory-limit-per-worker
-                  value: " {{ workflow.parameters.memory-limit-per-worker }}"
                 - name: base-product
                   value: "{{ workflow.parameters.base-product }}"
                 - name: bucket
@@ -113,7 +109,6 @@ spec:
           - name: year
           - name: base-product
           - name: version
-          - name: memory-limit-per-worker
           - name: bucket
           - name: overwrite
       container:
@@ -121,17 +116,17 @@ spec:
         imagePullPolicy: IfNotPresent
         resources:
           requests:
-            memory: 240Gi
-            cpu: 30
+            memory: 340Gi
+            cpu: 40
           limits:
-            cpu: 32
-            memory: 240Gi
+            cpu: 48
+            memory: 360Gi
         command: [python]
         args:
           - src/run_task.py
           - --tile-id
           - "{{ inputs.parameters.tile-id }}"
-          - --year
+          - --datetime
           - "{{ inputs.parameters.year }}"
           - --base-product
           - "{{ inputs.parameters.base-product }}"
@@ -140,7 +135,7 @@ spec:
           - --output-bucket
           - "{{ inputs.parameters.bucket }}"
           - --memory-limit-per-worker
-          - "{{ inputs.parameters.memory-limit-per-worker }}"
+          - "360GB"
           - --n-workers
           - "1"
           - --threads-per-worker
