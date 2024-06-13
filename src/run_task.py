@@ -148,7 +148,7 @@ def main(
         min_timesteps=5,
         geomad_options=dict(
             num_threads=geomad_threads,
-            work_chunks=(601, 601),
+            work_chunks=(600, 600),
             maxiters=100,
         ),
     )

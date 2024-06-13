@@ -1,5 +1,6 @@
 from dep_tools.exceptions import EmptyCollectionError
 from dep_tools.processors import LandsatProcessor, Processor, S2Processor
+from dep_tools.s2_utils import mask_clouds
 from dep_tools.stac_utils import set_stac_properties
 from dep_tools.utils import scale_and_offset
 from geopandas import GeoDataFrame, read_file
@@ -21,8 +22,12 @@ def mask_clouds_s2_aws(
     xr: DataArray,
     filters: list | None = [("closing", 5), ("opening", 5)],
     keep_ints: bool = True,
+    use_scl: bool = False,
     mask_cloud_percentage: int = 20,
 ) -> DataArray:
+    if use_scl:
+        return mask_clouds(xr, filters=filters, keep_ints=keep_ints)
+
     try:
         cloud_mask = xr.sel(band="cloud").astype("uint16") > mask_cloud_percentage
     except KeyError:
@@ -77,6 +82,7 @@ class GeoMADProcessor(Processor):
         },
         filters: list | None = [("closing", 5), ("opening", 5)],
         keep_ints: bool = True,
+        use_scl: bool = False,
         mask_cloud_percentage: int = 20,
         drop_vars: list[str] = [],
     ) -> None:
@@ -88,6 +94,7 @@ class GeoMADProcessor(Processor):
                 "filters": filters,
                 "keep_ints": keep_ints,
                 "mask_cloud_percentage": mask_cloud_percentage,
+                "use_scl": use_scl
             },
         )
         self.scale_and_offset = scale_and_offset
@@ -115,7 +122,7 @@ class GeoMADProcessor(Processor):
 
 
 class GeoMADSentinel2Processor(GeoMADProcessor, S2Processor):
-    def __init__(self, drop_vars=["SCL"], **kwargs) -> None:
+    def __init__(self, drop_vars=["scl"], **kwargs) -> None:
         super(GeoMADSentinel2Processor, self).__init__(drop_vars=drop_vars, **kwargs)
 
 
