@@ -94,7 +94,7 @@ class GeoMADProcessor(Processor):
                 "filters": filters,
                 "keep_ints": keep_ints,
                 "mask_cloud_percentage": mask_cloud_percentage,
-                "use_scl": use_scl
+                "use_scl": use_scl,
             },
         )
         self.scale_and_offset = scale_and_offset
