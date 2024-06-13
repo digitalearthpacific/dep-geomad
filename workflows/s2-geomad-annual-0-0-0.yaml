@@ -1,0 +1,148 @@
+kind: Workflow
+metadata:
+  generateName: sentinel-2-geomad-
+  namespace: argo
+spec:
+  entrypoint: workflow-entrypoint
+  serviceAccountName: public-bucket-writer
+  podGC:
+    strategy: OnWorkflowSuccess
+    deleteDelayDuration: 600s
+  parallelism: 20
+  workflowMetadata:
+    labels:
+      app: s2_geomad
+  arguments:
+    parameters:
+      - name: version
+        value: "0.2.0" # The version of the data product being made
+      - name: image-name
+        value: "dep-geomad" # The Docker image
+      - name: base-product
+        value: "s2"
+      - name: image-tag
+        value: "0.2.0" # The Docker image and code version
+      - name: memory-limit-per-worker
+        value: "240GB" # Dask's memory limit per worker.
+      - name: bucket
+        value: "dep-public-test" # The bucket to store the data
+      - name: overwrite
+        value: "--no-overwrite" # Can be "--overwrite" or "--no-overwrite"
+  templates:
+    - name: workflow-entrypoint
+      dag:
+        tasks:
+          - name: generate-ids
+            template: generate
+            arguments:
+              parameters:
+                - name: regions
+                  value: "FJ" # Comma separated list "FJ,TO" or 'ALL'
+                - name: limit
+                  value: "999"
+                - name: years
+                  value: "2023" # One year "2022", or a period "2020-2021"
+                - name: version
+                  value: "{{ workflow.parameters.version }}"
+                - name: bucket
+                  value: "{{ workflow.parameters.bucket }}"
+                - name: overwrite
+                  value: "{{ workflow.parameters.overwrite }}"
+                - name: base-product
+                  value: "{{ workflow.parameters.base-product }}"
+
+          - name: process-id
+            depends: generate-ids.Succeeded
+            template: process
+            arguments:
+              parameters:
+                - name: tile-id
+                  value: "{{item.tile-id}}"
+                - name: year
+                  value: "{{item.year}}"
+                - name: version
+                  value: "{{ workflow.parameters.version }}"
+                - name: memory-limit-per-worker
+                  value: " {{ workflow.parameters.memory-limit-per-worker }}"
+                - name: base-product
+                  value: "{{ workflow.parameters.base-product }}"
+                - name: bucket
+                  value: "{{ workflow.parameters.bucket }}"
+                - name: overwrite
+                  value: "{{ workflow.parameters.overwrite }}"
+            withParam: "{{ tasks.generate-ids.outputs.result }}"
+
+    - name: generate
+      inputs:
+        parameters:
+          - name: regions
+          - name: years
+          - name: base-product
+          - name: version
+          - name: limit
+          - name: bucket
+          - name: overwrite
+      container:
+        image: "ghcr.io/digitalearthpacific/{{ workflow.parameters.image-name }}:{{ workflow.parameters.image-tag }}"
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            memory: 100Mi
+            cpu: 1.0
+        command: [python]
+        args:
+          - src/print_tasks.py
+          - --regions
+          - "{{ inputs.parameters.regions }}"
+          - --years
+          - "{{ inputs.parameters.years }}"
+          - --base-product
+          - "{{ inputs.parameters.base-product }}"
+          - --version
+          - "{{ inputs.parameters.version }}"
+          - --limit
+          - "{{ inputs.parameters.limit }}"
+          - --output-bucket
+          - "{{ inputs.parameters.bucket }}"
+          - "{{ inputs.parameters.overwrite }}"
+
+    - name: process
+      inputs:
+        parameters:
+          - name: tile-id
+          - name: year
+          - name: base-product
+          - name: version
+          - name: memory-limit-per-worker
+          - name: bucket
+          - name: overwrite
+      container:
+        image: "ghcr.io/digitalearthpacific/{{ workflow.parameters.image-name }}:{{ workflow.parameters.image-tag }}"
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            memory: 240Gi
+            cpu: 30
+          limits:
+            cpu: 32
+            memory: 240Gi
+        command: [python]
+        args:
+          - src/run_task.py
+          - --tile-id
+          - "{{ inputs.parameters.tile-id }}"
+          - --year
+          - "{{ inputs.parameters.year }}"
+          - --base-product
+          - "{{ inputs.parameters.base-product }}"
+          - --version
+          - "{{ inputs.parameters.version }}"
+          - --output-bucket
+          - "{{ inputs.parameters.bucket }}"
+          - --memory-limit-per-worker
+          - "{{ inputs.parameters.memory-limit-per-worker }}"
+          - --n-workers
+          - "1"
+          - --threads-per-worker
+          - "64"
+          - "{{ inputs.parameters.overwrite }}"

@@ -1,35 +1,37 @@
 from logging import INFO, Formatter, Logger, StreamHandler, getLogger
 
-import geopandas as gpd
+import boto3
 import typer
 from dask.distributed import Client
-from dep_tools.azure import blob_exists
+from dep_tools.aws import object_exists
 from dep_tools.exceptions import EmptyCollectionError
-from dep_tools.loaders import LandsatOdcLoader, Sentinel2OdcLoader
+from dep_tools.grids import PACIFIC_GRID_10, PACIFIC_GRID_30
+from dep_tools.loaders import OdcLoader
 from dep_tools.namers import DepItemPath
-from dep_tools.processors import LandsatProcessor, Processor, S2Processor
-from dep_tools.stac_utils import set_stac_properties
-
-# from dep_tools.task import SimpleLoggingAreaTask
-from dep_tools.task import SimpleLoggingAreaTask
-from dep_tools.writers import AzureDsWriter
-from odc.algo import geomedian_with_mads
+from dep_tools.searchers import PystacSearcher
+from dep_tools.writers import AwsDsCogWriter
+from odc.stac import configure_s3_access
 from typing_extensions import Annotated
-from xarray import DataArray, Dataset
+
+from utils import GeoMADAWSSentinel2Processor
 
 S2_BANDS = [
-    "SCL",
-    "B02",
-    "B03",
-    "B04",
-    "B05",
-    "B06",
-    "B07",
-    "B08",
-    "B8A",
-    "B11",
-    "B12",
+    "cloud",
+    "coastal",
+    "blue",
+    "green",
+    "red",
+    "rededge1",
+    "rededge2",
+    "rededge3",
+    "nir",
+    "nir08",
+    "nir09",
+    "swir16",
+    "swir22",
 ]
+
+LANDSAT_BANDS = ["qa_pixel", "red", "green", "blue", "nir08", "swir16", "swir22"]
 
 
 def get_logger(region_code: str) -> Logger:
@@ -49,79 +51,11 @@ def get_logger(region_code: str) -> Logger:
     return log
 
 
-def get_grid() -> gpd.GeoDataFrame:
-    return (
-        gpd.read_file(
-            "https://raw.githubusercontent.com/digitalearthpacific/dep-grid/master/grid_pacific.geojson"
-        )
-        .astype({"tile_id": str, "country_code": str})
-        .set_index(["tile_id", "country_code"], drop=False)
-    )
-
-
-class GeoMADProcessor(Processor):
-    def __init__(
-        self,
-        send_area_to_processor: bool = False,
-        scale_and_offset: bool = False,
-        harmonize_to_old: bool = True,
-        mask_clouds: bool = True,
-        load_data_before_writing: bool = True,
-        min_timesteps: int = 0,
-        geomad_options: dict = {
-            "num_threads": 4,
-            "work_chunks": (1000, 1000),
-            "maxiters": 1000,
-        },
-        filters: list | None = [("closing", 5), ("opening", 5)],
-        keep_ints: bool = True,
-        drop_vars: list[str] = [],
-    ) -> None:
-        super().__init__(
-            send_area_to_processor,
-            scale_and_offset,
-            mask_clouds,
-            mask_clouds_kwargs={"filters": filters, "keep_ints": keep_ints},
-        )
-        self.scale_and_offset = scale_and_offset
-        self.harmonize_to_old = harmonize_to_old
-        self.load_data_before_writing = load_data_before_writing
-        self.min_timesteps = min_timesteps
-        self.geomad_options = geomad_options
-        self.drop_vars = drop_vars
-
-    def process(self, xr: DataArray) -> Dataset:
-        # Raise an exception if there's not enough data
-        if xr.time.size < self.min_timesteps:
-            raise EmptyCollectionError(
-                f"{xr.time.size} is less than the minimum {self.min_timesteps} timesteps"
-            )
-
-        xr = super().process(xr)
-        data = xr.drop_vars(self.drop_vars)
-        geomad = geomedian_with_mads(data, **self.geomad_options)
-
-        if self.load_data_before_writing:
-            geomad = geomad.compute()
-
-        output = set_stac_properties(data, geomad)
-        return output
-
-
-class GeoMADSentinel2Processor(GeoMADProcessor, S2Processor):
-    def __init__(self, drop_vars=["SCL"], **kwargs) -> None:
-        super(GeoMADSentinel2Processor, self).__init__(drop_vars=drop_vars, **kwargs)
-
-
-class GeoMADLandsatProcessor(GeoMADProcessor, LandsatProcessor):
-    def __init__(self, drop_vars=["qa_pixel"], **kwargs) -> None:
-        super(GeoMADLandsatProcessor, self).__init__(drop_vars=drop_vars, **kwargs)
-
-
 def main(
-    region_code: Annotated[str, typer.Option()],
+    tile_id: Annotated[str, typer.Option()],
     datetime: Annotated[str, typer.Option()],
     version: Annotated[str, typer.Option()],
+    output_bucket: str = None,
     dataset_id: str = "geomad",
     base_product: str = "ls",
     memory_limit_per_worker: str = "50GB",
@@ -129,120 +63,111 @@ def main(
     threads_per_worker: int = 32,
     xy_chunk_size: int = 4096,
     geomad_threads: int = 10,
+    decimated: bool = False,
     all_bands: Annotated[bool, typer.Option()] = True,
     overwrite: Annotated[bool, typer.Option()] = False,
     only_tier_one: Annotated[bool, typer.Option()] = True,
     fall_back_to_tier_two: Annotated[bool, typer.Option()] = True,
 ) -> None:
-    grid = get_grid()
-    area = grid.loc[[region_code]]
+    log = get_logger(tile_id)
+    log.info(f"Starting processing for {tile_id}")
 
-    log = get_logger(region_code)
-    log.info(f"Starting processing for {region_code}")
+    grid = PACIFIC_GRID_30
+    if base_product == "s2":
+        grid = PACIFIC_GRID_10
+
+    tile_index = tuple(int(i) for i in tile_id.split(","))
+    geobox = grid.tile_geobox(tile_index)
+
+    if decimated:
+        log.warning("Running at 1/10th resolution")
+        geobox = geobox.zoom_out(10)
+
+    # Make sure we can access S3
+    log.info("Configuring S3 access")
+    configure_s3_access(cloud_defaults=True)
 
     itempath = DepItemPath(
         base_product, dataset_id, version, datetime, zero_pad_numbers=True
     )
-    stac_document = itempath.stac_path(region_code)
+    stac_document = itempath.stac_path(tile_id)
 
     # If we don't want to overwrite, and the destination file already exists, skip it
-    if not overwrite and blob_exists(stac_document):
+    if not overwrite and object_exists(output_bucket, stac_document):
         log.info(f"Item already exists at {stac_document}")
         # This is an exit with success
         raise typer.Exit()
 
-    resolution = 10
-    if base_product == "ls":
-        resolution = 30
-
-    common_load_args = dict(
-        epsg=3832,
+    dict(
         datetime=datetime,
         dask_chunksize=dict(time=1, x=xy_chunk_size, y=xy_chunk_size),
-        nodata_value=0,
-        keep_ints=True,
-        load_as_dataset=True,
     )
 
     if base_product == "ls":
-        log.info("Configuring Landsat process")
+        raise Exception("Only S2 is supported at the moment")
 
-        resolution = 30
-        bands = ["qa_pixel", "red", "green", "blue", "nir08", "swir16", "swir22"]
-        if not all_bands:
-            bands = ["qa_pixel", "red", "green", "blue"]
+        # bands = LANDSAT_BANDS
+        # if not all_bands:
+        #     bands = ["qa_pixel", "red", "green", "blue"]
 
-        loader = LandsatOdcLoader(
-            **common_load_args,
-            odc_load_kwargs=dict(
-                fail_on_error=False,
-                resolution=resolution,
-                groupby="solar_day",
-                bands=bands,
-            ),
-            exclude_platforms=["landsat-7"],
-            only_tier_one=only_tier_one,
-            fall_back_to_tier_two=fall_back_to_tier_two,
-        )
-        ProcessorClass = GeoMADLandsatProcessor
+        # loader = LandsatOdcLoader(
+        #     **common_load_args,
+        #     odc_load_kwargs=dict(
+        #         fail_on_error=False,
+        #         resolution=resolution,
+        #         groupby="solar_day",
+        #         bands=bands,
+        #     ),
+        #     exclude_platforms=["landsat-7"],
+        #     only_tier_one=only_tier_one,
+        #     fall_back_to_tier_two=fall_back_to_tier_two,
+        # )
+        # ProcessorClass = GeoMADLandsatProcessor
     elif base_product == "s2":
         log.info("Configuring Sentinel-2 process")
 
-        resolution = 10
         if not all_bands:
-            bands = ["SCL", "B04", "B03", "B02"]
+            bands = ["cloud", "red", "green", "blue"]
         else:
             bands = S2_BANDS
 
-        loader = Sentinel2OdcLoader(
-            **common_load_args,
-            odc_load_kwargs=dict(
-                fail_on_error=False,
-                resolution=resolution,
-                groupby="solar_day",
-                bands=bands,
-                stac_cfg={
-                    "sentinel-2-l2a": {
-                        "assets": {"*": {"nodata": 0, "data_type": "uint16"}}
-                    }
-                },
-            ),
-        )
-        ProcessorClass = GeoMADSentinel2Processor
+        catalog = "https://earth-search.aws.element84.com/v1/"
+        collection = "sentinel-2-c1-l2a"
+        ProcessorClass = GeoMADAWSSentinel2Processor
+        chunks = dict(time=1, x=3201, y=3201)
+        drop_vars = ["cloud"]
     else:
         raise Exception("Only LS is supported at the moment")
 
-    log.info("Configuring processor")
-    processor = ProcessorClass(
-        scale_and_offset=False,  # Don't want to work with floats
-        harmonize_to_old=True,  # This only applies to S-2
-        filters=[("closing", 5), ("opening", 5)],
-        keep_ints=True,
-        load_data_before_writing=True,
-        min_timesteps=5,
-        geomad_options=dict(
-            num_threads=geomad_threads,
-            work_chunks=(601, 601),
-            maxiters=100,
-        ),
+    searcher = PystacSearcher(
+        catalog=catalog,
+        collections=collection,
+        datetime=datetime,
     )
 
-    log.info("Configuring writer")
-    writer = AzureDsWriter(
+    loader = OdcLoader(bands=bands, chunks=chunks, groupby="solar_day")
+
+    processor = ProcessorClass(
+        geomad_options=dict(
+            work_chunks=(600, 600),
+            num_threads=geomad_threads,
+            maxiters=100,
+        ),
+        filters=[("closing", 5), ("opening", 5)],
+        mask_cloud_percentage=5,  # only used for S-2
+        min_timesteps=5,
+        drop_vars=drop_vars,
+    )
+
+    client = boto3.client("s3")
+    writer = AwsDsCogWriter(
         itempath=itempath,
         overwrite=overwrite,
         convert_to_int16=False,
         extra_attrs=dict(dep_version=version),
         write_multithreaded=True,
-    )
-
-    runner = SimpleLoggingAreaTask(
-        id=region_code,
-        area=area,
-        loader=loader,
-        processor=processor,
-        writer=writer,
-        logger=log,
+        bucket=output_bucket,
+        client=client,
     )
 
     paths = []
@@ -252,14 +177,32 @@ def main(
         memory_limit=memory_limit_per_worker,
     ):
         try:
-            paths = runner.run()
-        except EmptyCollectionError as e:
-            log.warning(f"No data found for this tile. Exception was {e}.")
+            # Find items
+            items = searcher.search(area=geobox)
+            log.info(f"Found {len(items)} items")
+
+            # Run the load process, which is lazy-loaded
+            data = loader.load(items, areas=geobox)
+            log.info(f"Found {len(data.time)} timesteps to load")
+
+            output_data = processor.process(data)
+            output_sizes = [output_data.sizes[d] for d in ["x", "y"]]
+            log.info(f"Processed data to shape {output_sizes}")
+
+            paths = writer.write(output_data, tile_id)
+
+            if paths is not None:
+                log.info(f"Completed writing to {paths[-1]}")
+            else:
+                log.warning("No paths returned from writer")
+
+        except EmptyCollectionError:
+            log.warning("No data found for this tile.")
         except Exception as e:
-            log.exception(f"Failed to process {region_code} with error: {e}")
+            log.exception(f"Failed to process with error: {e}")
             raise typer.Exit(code=1)
 
-        log.info(f"Completed processing for {region_code}")
+        log.info("Completed processing.")
         if len(paths) > 0:
             log.info(f"Item written to {stac_document}")
         else:
