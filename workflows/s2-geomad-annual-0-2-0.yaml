@@ -2,13 +2,15 @@ kind: Workflow
 metadata:
   generateName: sentinel-2-geomad-
   namespace: argo
+  annotations:
+    karpenter.sh/do-not-disrupt: "true"
 spec:
   entrypoint: workflow-entrypoint
   serviceAccountName: public-bucket-writer
   podGC:
     strategy: OnWorkflowSuccess
     deleteDelayDuration: 600s
-  parallelism: 1
+  parallelism: 99
   workflowMetadata:
     labels:
       app: s2_geomad
@@ -21,7 +23,7 @@ spec:
       - name: base-product
         value: "s2"
       - name: image-tag
-        value: "0.2.0" # The Docker image and code version
+        value: "0.2.0-1-g47fff05" # The Docker image and code version
       - name: bucket
         value: "dep-public-test" # The bucket to store the data
       - name: overwrite
@@ -116,12 +118,15 @@ spec:
         imagePullPolicy: IfNotPresent
         resources:
           requests:
-            memory: 340Gi
-            cpu: 40
+            memory: 240Gi
+            cpu: 30
           limits:
-            cpu: 48
-            memory: 360Gi
+            cpu: 30
+            memory: 250Gi
         command: [python]
+        env:
+          - name: DASK_DISTRIBUTED__WORKER__MEMORY_SPILL
+            value: False
         args:
           - src/run_task.py
           - --tile-id
@@ -135,9 +140,11 @@ spec:
           - --output-bucket
           - "{{ inputs.parameters.bucket }}"
           - --memory-limit-per-worker
-          - "360GB"
+          - "260GB"
           - --n-workers
           - "1"
           - --threads-per-worker
-          - "64"
+          - "48"
+          - --xy-chunk-size
+          - "3201"
           - "{{ inputs.parameters.overwrite }}"

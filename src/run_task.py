@@ -172,6 +172,13 @@ def main(
         memory_limit=memory_limit_per_worker,
     ):
         try:
+            log.info(
+                (
+                    f"Started dask client with {n_workers} workers "
+                    f"and {threads_per_worker} threads with "
+                    f"{memory_limit_per_worker} memory"
+                )
+            )
             # Find items
             items = searcher.search(area=geobox)
             log.info(f"Found {len(items)} items")
@@ -180,12 +187,13 @@ def main(
             data = loader.load(items, areas=geobox)
             log.info(f"Found {len(data.time)} timesteps to load")
 
+            # Process data and load into memory
             output_data = processor.process(data)
             output_sizes = [output_data.sizes[d] for d in ["x", "y"]]
             log.info(f"Processed data to shape {output_sizes}")
 
+            # Write out data
             paths = writer.write(output_data, tile_id)
-
             if paths is not None:
                 log.info(f"Completed writing to {paths[-1]}")
             else:
