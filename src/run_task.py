@@ -184,13 +184,15 @@ def main(
                 searcher=searcher,
                 loader=loader,
                 processor=processor,
-                logger=log
+                logger=log,
             ).run()
     except Exception as e:
         log.exception(f"Failed to process with error: {e}")
         raise typer.Exit(code=1)
 
-    log.info(f"Completed processing. Wrote {len(paths)} items to https://{output_bucket}.s3.us-west-2.amazonaws.com/{ stac_document}")
+    log.info(
+        f"Completed processing. Wrote {len(paths)} items to https://{output_bucket}.s3.us-west-2.amazonaws.com/{ stac_document}"
+    )
 
 
 if __name__ == "__main__":

@@ -29,10 +29,7 @@ class GeoMADProcessor(Processor):
             send_area_to_processor,
             scale_and_offset,
             mask_clouds,
-            mask_clouds_kwargs={
-                "filters": filters,
-                "keep_ints": keep_ints
-            },
+            mask_clouds_kwargs={"filters": filters, "keep_ints": keep_ints},
         )
         self.scale_and_offset = scale_and_offset
         self.load_data_before_writing = load_data_before_writing
@@ -66,4 +63,3 @@ class GeoMADSentinel2Processor(GeoMADProcessor, S2Processor):
 class GeoMADLandsatProcessor(GeoMADProcessor, LandsatProcessor):
     def __init__(self, drop_vars=["qa_pixel"], **kwargs) -> None:
         super(GeoMADLandsatProcessor, self).__init__(drop_vars=drop_vars, **kwargs)
-
