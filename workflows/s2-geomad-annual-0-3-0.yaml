@@ -17,17 +17,17 @@ spec:
   arguments:
     parameters:
       - name: version
-        value: "0.2.0" # The version of the data product being made
+        value: "0.3.0" # The version of the data product being made
       - name: image-name
         value: "dep-geomad" # The Docker image
       - name: base-product
         value: "s2"
       - name: image-tag
-        value: "0.2.0-1-g47fff05" # The Docker image and code version
+        value: "0.3.0" # The Docker image and code version
       - name: bucket
-        value: "dep-public-test" # The bucket to store the data
+        value: "dep-public-staging" # The bucket to store the data
       - name: overwrite
-        value: "--no-overwrite" # Can be "--overwrite" or "--no-overwrite"
+        value: "--overwrite" # Can be "--overwrite" or "--no-overwrite"
   templates:
     - name: workflow-entrypoint
       dag:
@@ -41,7 +41,7 @@ spec:
                 - name: limit
                   value: "999"
                 - name: years
-                  value: "2023" # One year "2022", or a period "2020-2021"
+                  value: "2024" # One year "2022", or a period "2020-2021"
                 - name: version
                   value: "{{ workflow.parameters.version }}"
                 - name: bucket
@@ -139,7 +139,7 @@ spec:
           - "{{ inputs.parameters.version }}"
           - --output-bucket
           - "{{ inputs.parameters.bucket }}"
-          - --memory-limit-per-worker
+          - --memory-limit
           - "260GB"
           - --n-workers
           - "1"
