@@ -4,18 +4,14 @@ import boto3
 import typer
 from dask.distributed import Client
 from dep_tools.aws import object_exists
-from dep_tools.exceptions import EmptyCollectionError
 from dep_tools.grids import PACIFIC_GRID_10, PACIFIC_GRID_30
 from dep_tools.loaders import OdcLoader
 from dep_tools.namers import S3ItemPath
 from dep_tools.searchers import PystacSearcher
-from dep_tools.writers import AwsDsCogWriter
+from dep_tools.task import AwsStacTask as Task
 from odc.stac import configure_s3_access
 from typing_extensions import Annotated
 from utils import GeoMADSentinel2Processor
-
-from dep_tools.task import AwsStacTask as Task
-
 
 S2_BANDS = [
     "scl",
@@ -72,11 +68,12 @@ def main(
     fall_back_to_tier_two: Annotated[bool, typer.Option()] = True,
 ) -> None:
     log = get_logger(tile_id)
-    log.info(f"Starting processing for {tile_id}")
+    log.info("Starting processing.")
 
-    grid = PACIFIC_GRID_30
     if base_product == "s2":
         grid = PACIFIC_GRID_10
+    else:
+        grid = PACIFIC_GRID_30
 
     tile_index = tuple(int(i) for i in tile_id.split(","))
     geobox = grid.tile_geobox(tile_index)
