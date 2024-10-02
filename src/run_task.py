@@ -163,11 +163,7 @@ def main(
     )
 
     # Custom writer so we write multithreaded
-    writer = AwsDsCogWriter(
-        itempath,
-        write_multithreaded=True
-    )
-
+    writer = AwsDsCogWriter(itempath, write_multithreaded=True)
 
     try:
         with dask.config.set(

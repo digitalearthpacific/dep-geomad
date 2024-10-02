@@ -143,5 +143,5 @@ spec:
           - --threads-per-worker
           - "128"
           - --xy-chunk-size
-          - "1920"
+          - "3200"
           - "{{ inputs.parameters.overwrite }}"
