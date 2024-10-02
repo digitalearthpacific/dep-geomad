@@ -10,6 +10,7 @@ from dep_tools.loaders import OdcLoader
 from dep_tools.namers import S3ItemPath
 from dep_tools.searchers import PystacSearcher
 from dep_tools.task import AwsStacTask as Task
+from dep_tools.writers import AwsDsCogWriter
 from odc.stac import configure_s3_access
 from typing_extensions import Annotated
 from utils import GeoMADSentinel2Processor
@@ -161,14 +162,21 @@ def main(
         drop_vars=drop_vars,
     )
 
+    # Custom writer so we write multithreaded
+    writer = AwsDsCogWriter(
+        itempath,
+        write_multithreaded=True
+    )
+
+
     try:
         with dask.config.set(
             {
                 "dataframe.shuffle.method": "p2p",
                 "distributed.worker.memory.target": False,
                 "distributed.worker.memory.spill": False,
-                "distributed.worker.memory.pause": 0.8,
-                "distributed.worker.memory.terminate": 0.95,
+                "distributed.worker.memory.pause": 0.9,
+                "distributed.worker.memory.terminate": 0.98,
             }
         ):
             with Client(
@@ -190,6 +198,7 @@ def main(
                     searcher=searcher,
                     loader=loader,
                     processor=processor,
+                    writer=writer,
                     logger=log,
                 ).run()
     except Exception as e:
