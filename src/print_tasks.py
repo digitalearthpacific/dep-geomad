@@ -3,12 +3,11 @@ import sys
 from itertools import product
 from typing import Annotated, Optional
 
+import boto3
 import typer
 from dep_tools.aws import object_exists
-from dep_tools.azure import blob_exists
+from dep_tools.grids import get_tiles
 from dep_tools.namers import DepItemPath
-
-from utils import get_grid
 
 
 def main(
@@ -21,9 +20,8 @@ def main(
     output_prefix: Optional[str] = None,
     overwrite: Annotated[bool, typer.Option()] = False,
 ) -> None:
-    tiles = get_grid()
-
-    region_codes = None if regions.upper() == "ALL" else regions.split(",")
+    country_codes = None if regions.upper() == "ALL" else regions.split(",")
+    tiles = get_tiles(country_codes=country_codes)
 
     if limit is not None:
         limit = int(limit)
@@ -35,19 +33,16 @@ def main(
     elif len(years) > 2:
         ValueError(f"{years} is not a valid value for --years")
 
-    # Filter by country codes if we have them
-    if region_codes is not None:
-        tiles = tiles.loc[tiles.country_code.isin(region_codes)]
-
     tasks = [
-        {"tile-id": tile, "year": year, "version": version}
-        for tile, year in product(list(tiles.tile_id), years)
+        {"tile-id": tile[0], "year": year, "version": version}
+        for tile, year in product(list(tiles), years)
     ]
 
     # If we don't want to overwrite, then we should only run tasks that don't already exist
     # i.e., they failed in the past or they're missing for some other reason
     if not overwrite:
         valid_tasks = []
+        client = boto3.client("s3")
         for task in tasks:
             itempath = DepItemPath(
                 base_product, "geomad", version, task["year"], zero_pad_numbers=True
@@ -57,12 +52,7 @@ def main(
             if output_prefix is not None:
                 stac_path = f"{output_prefix}/{stac_path}"
 
-            exists = False
-            if output_bucket is not None:
-                exists = object_exists(output_bucket, stac_path)
-            else:
-                exists = blob_exists(stac_path)
-            if not exists:
+            if not object_exists(output_bucket, stac_path, client=client):
                 valid_tasks.append(task)
             if len(valid_tasks) == limit:
                 break

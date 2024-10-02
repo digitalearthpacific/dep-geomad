@@ -4,19 +4,17 @@ import boto3
 import typer
 from dask.distributed import Client
 from dep_tools.aws import object_exists
-from dep_tools.exceptions import EmptyCollectionError
 from dep_tools.grids import PACIFIC_GRID_10, PACIFIC_GRID_30
 from dep_tools.loaders import OdcLoader
-from dep_tools.namers import DepItemPath
+from dep_tools.namers import S3ItemPath
 from dep_tools.searchers import PystacSearcher
-from dep_tools.writers import AwsDsCogWriter
+from dep_tools.task import AwsStacTask as Task
 from odc.stac import configure_s3_access
 from typing_extensions import Annotated
-
-from utils import GeoMADAWSSentinel2Processor
+from utils import GeoMADSentinel2Processor
 
 S2_BANDS = [
-    "cloud",
+    "scl",
     "coastal",
     "blue",
     "green",
@@ -58,7 +56,7 @@ def main(
     output_bucket: str = None,
     dataset_id: str = "geomad",
     base_product: str = "ls",
-    memory_limit_per_worker: str = "50GB",
+    memory_limit: str = "50GB",
     n_workers: int = 2,
     threads_per_worker: int = 32,
     xy_chunk_size: int = 3201,
@@ -70,11 +68,12 @@ def main(
     fall_back_to_tier_two: Annotated[bool, typer.Option()] = True,
 ) -> None:
     log = get_logger(tile_id)
-    log.info(f"Starting processing for {tile_id}")
+    log.info("Starting processing.")
 
-    grid = PACIFIC_GRID_30
     if base_product == "s2":
         grid = PACIFIC_GRID_10
+    else:
+        grid = PACIFIC_GRID_30
 
     tile_index = tuple(int(i) for i in tile_id.split(","))
     geobox = grid.tile_geobox(tile_index)
@@ -87,13 +86,19 @@ def main(
     log.info("Configuring S3 access")
     configure_s3_access(cloud_defaults=True)
 
-    itempath = DepItemPath(
-        base_product, dataset_id, version, datetime, zero_pad_numbers=True
+    client = boto3.client("s3")
+
+    itempath = S3ItemPath(
+        bucket=output_bucket,
+        sensor=base_product,
+        dataset_id=dataset_id,
+        version=version,
+        time=datetime,
     )
     stac_document = itempath.stac_path(tile_id)
 
     # If we don't want to overwrite, and the destination file already exists, skip it
-    if not overwrite and object_exists(output_bucket, stac_document):
+    if not overwrite and object_exists(output_bucket, stac_document, client=client):
         log.info(f"Item already exists at {stac_document}")
         # This is an exit with success
         raise typer.Exit()
@@ -122,15 +127,16 @@ def main(
         log.info("Configuring Sentinel-2 process")
 
         if not all_bands:
-            bands = ["cloud", "red", "green", "blue"]
+            bands = ["scl", "red", "green", "blue"]
         else:
             bands = S2_BANDS
 
         catalog = "https://earth-search.aws.element84.com/v1/"
         collection = "sentinel-2-c1-l2a"
-        ProcessorClass = GeoMADAWSSentinel2Processor
+        ProcessorClass = GeoMADSentinel2Processor
         chunks = dict(time=1, x=xy_chunk_size, y=xy_chunk_size)
-        drop_vars = ["cloud"]
+        drop_vars = ["scl"]
+        filters = [("dilation", 3), ("erosion", 2)]
     else:
         raise Exception("Only LS is supported at the moment")
 
@@ -140,7 +146,9 @@ def main(
         datetime=datetime,
     )
 
-    loader = OdcLoader(bands=bands, chunks=chunks, groupby="solar_day")
+    loader = OdcLoader(
+        bands=bands, chunks=chunks, groupby="solar_day", fail_on_error=False
+    )
 
     processor = ProcessorClass(
         geomad_options=dict(
@@ -148,68 +156,40 @@ def main(
             num_threads=geomad_threads,
             maxiters=100,
         ),
-        filters=[("closing", 5), ("opening", 5)],
-        mask_cloud_percentage=5,  # only used for S-2
+        filters=filters,
         min_timesteps=5,
         drop_vars=drop_vars,
     )
 
-    client = boto3.client("s3")
-    writer = AwsDsCogWriter(
-        itempath=itempath,
-        overwrite=overwrite,
-        convert_to_int16=False,
-        extra_attrs=dict(dep_version=version),
-        write_multithreaded=True,
-        bucket=output_bucket,
-        client=client,
-    )
-
-    paths = []
-    with Client(
-        n_workers=n_workers,
-        threads_per_worker=threads_per_worker,
-        memory_limit=memory_limit_per_worker,
-    ):
-        try:
+    try:
+        with Client(
+            n_workers=n_workers,
+            threads_per_worker=threads_per_worker,
+            memory_limit=memory_limit,
+        ):
             log.info(
                 (
                     f"Started dask client with {n_workers} workers "
                     f"and {threads_per_worker} threads with "
-                    f"{memory_limit_per_worker} memory"
+                    f"{memory_limit} memory"
                 )
             )
-            # Find items
-            items = searcher.search(area=geobox)
-            log.info(f"Found {len(items)} items")
+            paths = Task(
+                itempath=itempath,
+                id=tile_index,
+                area=geobox,
+                searcher=searcher,
+                loader=loader,
+                processor=processor,
+                logger=log,
+            ).run()
+    except Exception as e:
+        log.exception(f"Failed to process with error: {e}")
+        raise typer.Exit(code=1)
 
-            # Run the load process, which is lazy-loaded
-            data = loader.load(items, areas=geobox)
-            log.info(f"Found {len(data.time)} timesteps to load")
-
-            # Process data and load into memory
-            output_data = processor.process(data)
-            output_sizes = [output_data.sizes[d] for d in ["x", "y"]]
-            log.info(f"Processed data to shape {output_sizes}")
-
-            # Write out data
-            paths = writer.write(output_data, tile_id)
-            if paths is not None:
-                log.info(f"Completed writing to {paths[-1]}")
-            else:
-                log.warning("No paths returned from writer")
-
-        except EmptyCollectionError:
-            log.warning("No data found for this tile.")
-        except Exception as e:
-            log.exception(f"Failed to process with error: {e}")
-            raise typer.Exit(code=1)
-
-        log.info("Completed processing.")
-        if len(paths) > 0:
-            log.info(f"Item written to {stac_document}")
-        else:
-            log.warning("Nothing written")
+    log.info(
+        f"Completed processing. Wrote {len(paths)} items to https://{output_bucket}.s3.us-west-2.amazonaws.com/{ stac_document}"
+    )
 
 
 if __name__ == "__main__":
