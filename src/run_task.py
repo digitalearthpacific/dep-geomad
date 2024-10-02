@@ -1,6 +1,7 @@
 from logging import INFO, Formatter, Logger, StreamHandler, getLogger
 
 import boto3
+import dask
 import typer
 from dask.distributed import Client
 from dep_tools.aws import object_exists
@@ -162,27 +163,28 @@ def main(
     )
 
     try:
-        with Client(
-            n_workers=n_workers,
-            threads_per_worker=threads_per_worker,
-            memory_limit=memory_limit,
-        ):
-            log.info(
-                (
-                    f"Started dask client with {n_workers} workers "
-                    f"and {threads_per_worker} threads with "
-                    f"{memory_limit} memory"
+        with dask.config.set({"dataframe.shuffle.method": "p2p"}):
+            with Client(
+                n_workers=n_workers,
+                threads_per_worker=threads_per_worker,
+                memory_limit=memory_limit,
+            ):
+                log.info(
+                    (
+                        f"Started dask client with {n_workers} workers "
+                        f"and {threads_per_worker} threads with "
+                        f"{memory_limit} memory"
+                    )
                 )
-            )
-            paths = Task(
-                itempath=itempath,
-                id=tile_index,
-                area=geobox,
-                searcher=searcher,
-                loader=loader,
-                processor=processor,
-                logger=log,
-            ).run()
+                paths = Task(
+                    itempath=itempath,
+                    id=tile_index,
+                    area=geobox,
+                    searcher=searcher,
+                    loader=loader,
+                    processor=processor,
+                    logger=log,
+                ).run()
     except Exception as e:
         log.exception(f"Failed to process with error: {e}")
         raise typer.Exit(code=1)
