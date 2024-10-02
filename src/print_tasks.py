@@ -55,10 +55,10 @@ def main(
                 version=version,
                 time=task["year"],
             )
-            stac_document = itempath.stac_path(task["tile-id"].split(","))
+            stac_path = itempath.stac_path(task["tile-id"].split(","))
 
             if output_prefix is not None:
-                stac_path = f"{output_prefix}/{stac_document}"
+                stac_path = f"{output_prefix}/{stac_path}"
 
             if not object_exists(output_bucket, stac_path, client=client):
                 valid_tasks.append(task)
