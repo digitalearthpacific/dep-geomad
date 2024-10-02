@@ -152,7 +152,7 @@ def main(
 
     processor = ProcessorClass(
         geomad_options=dict(
-            work_chunks=(3201, 3201),
+            work_chunks=(xy_chunk_size, xy_chunk_size),
             num_threads=geomad_threads,
             maxiters=100,
         ),
