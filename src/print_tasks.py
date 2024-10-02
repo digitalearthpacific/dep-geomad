@@ -34,7 +34,7 @@ def main(
         ValueError(f"{years} is not a valid value for --years")
 
     tasks = [
-        {"tile-id": tile[0], "year": year, "version": version}
+        {"tile-id": ",".join(tile[0]), "year": year, "version": version}
         for tile, year in product(list(tiles), years)
     ]
 
