@@ -7,7 +7,7 @@ import boto3
 import typer
 from dep_tools.aws import object_exists
 from dep_tools.grids import get_tiles
-from dep_tools.namers import DepItemPath
+from dep_tools.namers import S3ItemPath
 
 
 def main(
@@ -48,13 +48,17 @@ def main(
         valid_tasks = []
         client = boto3.client("s3")
         for task in tasks:
-            itempath = DepItemPath(
-                base_product, "geomad", version, task["year"], zero_pad_numbers=True
+            itempath = S3ItemPath(
+                bucket=output_bucket,
+                sensor=base_product,
+                dataset_id="geomad",
+                version=version,
+                time=task["year"],
             )
-            stac_path = itempath.stac_path(task["tile-id"])
+            stac_document = itempath.stac_path(task["tile-id"].split(","))
 
             if output_prefix is not None:
-                stac_path = f"{output_prefix}/{stac_path}"
+                stac_path = f"{output_prefix}/{stac_document}"
 
             if not object_exists(output_bucket, stac_path, client=client):
                 valid_tasks.append(task)

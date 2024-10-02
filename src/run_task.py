@@ -162,7 +162,15 @@ def main(
     )
 
     try:
-        with dask.config.set({"dataframe.shuffle.method": "p2p"}):
+        with dask.config.set(
+            {
+                "dataframe.shuffle.method": "p2p",
+                "distributed.worker.memory.target": False,
+                "distributed.worker.memory.spill": False,
+                "distributed.worker.memory.pause": 0.8,
+                "distributed.worker.memory.terminate": 0.95,
+            }
+        ):
             with Client(
                 n_workers=n_workers,
                 threads_per_worker=threads_per_worker,

@@ -10,7 +10,7 @@ spec:
   podGC:
     strategy: OnWorkflowSuccess
     deleteDelayDuration: 600s
-  parallelism: 99
+  parallelism: 50
   workflowMetadata:
     labels:
       app: s2_geomad
@@ -23,11 +23,11 @@ spec:
       - name: base-product
         value: "s2"
       - name: image-tag
-        value: "0.3.0" # The Docker image and code version
+        value: "0.3.0-6-gce861be" # The Docker image and code version
       - name: bucket
         value: "dep-public-staging" # The bucket to store the data
       - name: overwrite
-        value: "--overwrite" # Can be "--overwrite" or "--no-overwrite"
+        value: "--no-overwrite" # Can be "--overwrite" or "--no-overwrite"
   templates:
     - name: workflow-entrypoint
       dag:
@@ -37,11 +37,11 @@ spec:
             arguments:
               parameters:
                 - name: regions
-                  value: "FJ" # Comma separated list "FJ,TO" or 'ALL'
+                  value: "FJI" # Comma separated list "FJI,TON" or 'ALL'
                 - name: limit
                   value: "999"
                 - name: years
-                  value: "2024" # One year "2022", or a period "2020-2021"
+                  value: "2023" # One year "2022", or a period "2020-2021"
                 - name: version
                   value: "{{ workflow.parameters.version }}"
                 - name: bucket
@@ -118,15 +118,12 @@ spec:
         imagePullPolicy: IfNotPresent
         resources:
           requests:
-            memory: 240Gi
-            cpu: 30
+            memory: 160Gi
+            cpu: 16
           limits:
-            cpu: 30
-            memory: 250Gi
+            cpu: 20
+            memory: 200Gi
         command: [python]
-        env:
-          - name: DASK_DISTRIBUTED__WORKER__MEMORY_SPILL
-            value: False
         args:
           - src/run_task.py
           - --tile-id
@@ -140,11 +137,11 @@ spec:
           - --output-bucket
           - "{{ inputs.parameters.bucket }}"
           - --memory-limit
-          - "260GB"
+          - "200GB"
           - --n-workers
           - "1"
           - --threads-per-worker
-          - "48"
+          - "64"
           - --xy-chunk-size
-          - "3201"
+          - "1920"
           - "{{ inputs.parameters.overwrite }}"
