@@ -55,7 +55,6 @@ def main(
     datetime: Annotated[str, typer.Option()],
     version: Annotated[str, typer.Option()],
     output_bucket: str = None,
-    dataset_id: str = "geomad",
     base_product: str = "ls",
     memory_limit: str = "50GB",
     n_workers: int = 2,
@@ -92,7 +91,7 @@ def main(
     itempath = S3ItemPath(
         bucket=output_bucket,
         sensor=base_product,
-        dataset_id=dataset_id,
+        dataset_id="geomad",
         version=version,
         time=datetime,
     )
