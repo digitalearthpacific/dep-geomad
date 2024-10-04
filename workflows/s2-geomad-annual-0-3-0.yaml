@@ -23,7 +23,7 @@ spec:
       - name: base-product
         value: "s2"
       - name: image-tag
-        value: "0.3.0-9-gc5d1ffe" # The Docker image and code version
+        value: "0.3.0-11-g7eea489" # The Docker image and code version
       - name: bucket
         value: "dep-public-staging" # The bucket to store the data
       - name: overwrite
@@ -118,11 +118,11 @@ spec:
         imagePullPolicy: IfNotPresent
         resources:
           requests:
-            memory: 450Gi
-            cpu: 50
+            memory: 320Gi
+            cpu: 42
           limits:
-            cpu: 64
-            memory: 500Gi
+            cpu: 48
+            memory: 360Gi
         command: [python]
         args:
           - src/run_task.py
@@ -137,11 +137,11 @@ spec:
           - --output-bucket
           - "{{ inputs.parameters.bucket }}"
           - --memory-limit
-          - "500GB"
+          - "128GB"
           - --n-workers
-          - "1"
+          - "4"
           - --threads-per-worker
-          - "128"
+          - "32"
           - --xy-chunk-size
-          - "3200"
+          - "1600"
           - "{{ inputs.parameters.overwrite }}"
