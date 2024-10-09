@@ -14,6 +14,7 @@ def main(
     years: Annotated[str, typer.Option()],
     version: Annotated[str, typer.Option()],
     regions: Optional[str] = "ALL",
+    tile_buffer_kms: Optional[int] = 0.0,
     limit: Optional[str] = None,
     base_product: str = "ls",
     output_bucket: Optional[str] = None,
@@ -21,7 +22,8 @@ def main(
     overwrite: Annotated[bool, typer.Option()] = False,
 ) -> None:
     country_codes = None if regions.upper() == "ALL" else regions.split(",")
-    tiles = get_tiles(country_codes=country_codes)
+
+    tiles = get_tiles(country_codes=country_codes, buffer_distance=tile_buffer_kms * 1000)
 
     if limit is not None:
         limit = int(limit)
