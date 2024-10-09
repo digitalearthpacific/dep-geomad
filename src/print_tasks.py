@@ -23,7 +23,9 @@ def main(
 ) -> None:
     country_codes = None if regions.upper() == "ALL" else regions.split(",")
 
-    tiles = get_tiles(country_codes=country_codes, buffer_distance=tile_buffer_kms * 1000)
+    tiles = get_tiles(
+        country_codes=country_codes, buffer_distance=tile_buffer_kms * 1000
+    )
 
     if limit is not None:
         limit = int(limit)
