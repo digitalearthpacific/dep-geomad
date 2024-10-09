@@ -15,6 +15,8 @@ from odc.stac import configure_s3_access
 from typing_extensions import Annotated
 from utils import GeoMADSentinel2Processor
 
+from dep_tools.exceptions import EmptyCollectionError
+
 S2_BANDS = [
     "scl",
     "coastal",
@@ -197,6 +199,9 @@ def main(
                     writer=writer,
                     logger=log,
                 ).run()
+    except EmptyCollectionError:
+        log.info("No items found for this tile")
+        raise typer.Exit()  # Exit with success
     except Exception as e:
         log.exception(f"Failed to process with error: {e}")
         raise typer.Exit(code=1)
