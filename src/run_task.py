@@ -67,6 +67,7 @@ def main(
     decimated: bool = False,
     all_bands: Annotated[bool, typer.Option()] = True,
     overwrite: Annotated[bool, typer.Option()] = False,
+    s2_old_filter: Annotated[bool, typer.Option()] = False,
     only_tier_one: Annotated[bool, typer.Option()] = True,
     fall_back_to_tier_two: Annotated[bool, typer.Option()] = True,
 ) -> None:
@@ -96,7 +97,7 @@ def main(
         sensor=base_product,
         dataset_id="geomad",
         version=version,
-        time=datetime,
+        time=datetime
     )
     stac_document = itempath.stac_path(tile_id)
 
@@ -134,12 +135,16 @@ def main(
         else:
             bands = S2_BANDS
 
+        filter = [("erosion", 3), ("dilation", 6)]
+        if s2_old_filter:
+            filter = [("dilation", 3), ("erosion", 2)]
+
         catalog = "https://earth-search.aws.element84.com/v1/"
         collection = "sentinel-2-c1-l2a"
         ProcessorClass = GeoMADSentinel2Processor
         chunks = dict(time=1, x=xy_chunk_size, y=xy_chunk_size)
         drop_vars = ["scl"]
-        filters = [("dilation", 3), ("erosion", 2)]
+        filters = filter
     else:
         raise Exception("Only LS is supported at the moment")
 
