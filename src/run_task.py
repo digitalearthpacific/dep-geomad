@@ -5,6 +5,7 @@ import dask
 import typer
 from dask.distributed import Client
 from dep_tools.aws import object_exists
+from dep_tools.exceptions import EmptyCollectionError
 from dep_tools.grids import PACIFIC_GRID_10, PACIFIC_GRID_30
 from dep_tools.loaders import OdcLoader
 from dep_tools.namers import S3ItemPath
@@ -14,8 +15,6 @@ from dep_tools.writers import AwsDsCogWriter
 from odc.stac import configure_s3_access
 from typing_extensions import Annotated
 from utils import GeoMADSentinel2Processor
-
-from dep_tools.exceptions import EmptyCollectionError
 
 S2_BANDS = [
     "scl",
@@ -97,7 +96,7 @@ def main(
         sensor=base_product,
         dataset_id="geomad",
         version=version,
-        time=datetime
+        time=datetime,
     )
     stac_document = itempath.stac_path(tile_id)
 
