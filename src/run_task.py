@@ -167,7 +167,7 @@ def main(
 
     if scale is not None:
         geomad_options["scale"] = scale
-    
+
     if offset is not None:
         geomad_options["offset"] = offset
 
