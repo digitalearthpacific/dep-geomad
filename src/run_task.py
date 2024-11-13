@@ -212,7 +212,7 @@ def main(
                     processor=processor,
                     writer=writer,
                     logger=log,
-                    post_processor=None
+                    post_processor=None,
                 ).run()
     except EmptyCollectionError:
         log.info("No items found for this tile")
