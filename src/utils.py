@@ -9,7 +9,6 @@ class GeoMADProcessor(Processor):
     def __init__(
         self,
         send_area_to_processor: bool = False,
-        scale_and_offset: bool = False,
         mask_clouds: bool = True,
         load_data_before_writing: bool = True,
         min_timesteps: int = 0,
@@ -27,11 +26,10 @@ class GeoMADProcessor(Processor):
     ) -> None:
         super().__init__(
             send_area_to_processor,
-            scale_and_offset,
-            mask_clouds,
+            scale_and_offset=False,  # Do scale and offset in geomad code
+            mask_clouds=mask_clouds,
             mask_clouds_kwargs={"filters": filters, "keep_ints": keep_ints},
         )
-        self.scale_and_offset = scale_and_offset
         self.load_data_before_writing = load_data_before_writing
         self.min_timesteps = min_timesteps
         self.geomad_options = geomad_options

@@ -67,6 +67,8 @@ def main(
     all_bands: Annotated[bool, typer.Option()] = True,
     overwrite: Annotated[bool, typer.Option()] = False,
     s2_old_filter: Annotated[bool, typer.Option()] = False,
+    scale: Annotated[float | None, typer.Option()] = None,
+    offset: Annotated[float | None, typer.Option()] = None,
     only_tier_one: Annotated[bool, typer.Option()] = True,
     fall_back_to_tier_two: Annotated[bool, typer.Option()] = True,
 ) -> None:
@@ -157,12 +159,20 @@ def main(
         bands=bands, chunks=chunks, groupby="solar_day", fail_on_error=False
     )
 
+    geomad_options = dict(
+        work_chunks=(xy_chunk_size, xy_chunk_size),
+        num_threads=geomad_threads,
+        maxiters=100,
+    )
+
+    if scale is not None:
+        geomad_options["scale"] = scale
+    
+    if offset is not None:
+        geomad_options["offset"] = offset
+
     processor = ProcessorClass(
-        geomad_options=dict(
-            work_chunks=(xy_chunk_size, xy_chunk_size),
-            num_threads=geomad_threads,
-            maxiters=100,
-        ),
+        geomad_options=geomad_options,
         filters=filters,
         min_timesteps=5,
         drop_vars=drop_vars,
