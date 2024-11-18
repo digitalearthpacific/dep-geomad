@@ -10,12 +10,12 @@ from dep_tools.grids import PACIFIC_GRID_10, PACIFIC_GRID_30
 from dep_tools.loaders import OdcLoader
 from dep_tools.namers import S3ItemPath
 from dep_tools.searchers import PystacSearcher
+from dep_tools.stac_utils import StacCreator
 from dep_tools.task import AwsStacTask as Task
 from dep_tools.writers import AwsDsCogWriter
-from dep_tools.stac_utils import StacCreator
 from odc.stac import configure_s3_access
 from typing_extensions import Annotated
-from utils import GeoMADSentinel2Processor, GeoMADPostProcessor
+from utils import GeoMADPostProcessor, GeoMADSentinel2Processor
 
 S2_BANDS = [
     "scl",
@@ -184,10 +184,7 @@ def main(
 
     # STAC making thing
     stac_creator = StacCreator(
-        itempath=itempath,
-        remote=True,
-        make_hrefs_https=True,
-        with_raster=True
+        itempath=itempath, remote=True, make_hrefs_https=True, with_raster=True
     )
 
     post_processor = GeoMADPostProcessor(
