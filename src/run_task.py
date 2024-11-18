@@ -12,9 +12,10 @@ from dep_tools.namers import S3ItemPath
 from dep_tools.searchers import PystacSearcher
 from dep_tools.task import AwsStacTask as Task
 from dep_tools.writers import AwsDsCogWriter
+from dep_tools.stac_utils import StacCreator
 from odc.stac import configure_s3_access
 from typing_extensions import Annotated
-from utils import GeoMADSentinel2Processor
+from utils import GeoMADSentinel2Processor, GeoMADPostProcessor
 
 S2_BANDS = [
     "scl",
@@ -181,6 +182,21 @@ def main(
     # Custom writer so we write multithreaded
     writer = AwsDsCogWriter(itempath, write_multithreaded=True)
 
+    # STAC making thing
+    stac_creator = StacCreator(
+        itempath=itempath,
+        remote=True,
+        make_hrefs_https=True,
+        with_raster=True
+    )
+
+    post_processor = GeoMADPostProcessor(
+        vars=bands,
+        drop_vars=drop_vars,
+        scale=scale,
+        offset=offset,
+    )
+
     try:
         with dask.config.set(
             {
@@ -212,7 +228,8 @@ def main(
                     processor=processor,
                     writer=writer,
                     logger=log,
-                    post_processor=None,
+                    post_processor=post_processor,
+                    stac_creator=stac_creator,
                 ).run()
     except EmptyCollectionError:
         log.info("No items found for this tile")

@@ -2,6 +2,7 @@ from datacube_compute import geomedian_with_mads
 from dep_tools.exceptions import EmptyCollectionError
 from dep_tools.processors import LandsatProcessor, Processor, S2Processor
 from dep_tools.stac_utils import set_stac_properties
+from dep_tools.task import AreaTask
 from xarray import DataArray, Dataset
 
 
@@ -50,6 +51,7 @@ class GeoMADProcessor(Processor):
             geomad = geomad.compute()
 
         output = set_stac_properties(data, geomad)
+
         return output
 
 
@@ -61,3 +63,28 @@ class GeoMADSentinel2Processor(GeoMADProcessor, S2Processor):
 class GeoMADLandsatProcessor(GeoMADProcessor, LandsatProcessor):
     def __init__(self, drop_vars=["qa_pixel"], **kwargs) -> None:
         super(GeoMADLandsatProcessor, self).__init__(drop_vars=drop_vars, **kwargs)
+
+
+class GeoMADPostProcessor(Processor):
+    def __init__(
+        self,
+        vars: list[str] = [],
+        drop_vars: list[str] = [],
+        scale: float | None = None,
+        offset: float | None = None,
+    ):
+        self._vars = [v for v in vars if v not in drop_vars]
+        self._scale = scale
+        self._offset = offset
+
+    def process(self, xr: Dataset):
+        print(f"post processing {xr}")
+        if len(self._vars) != 0:
+            for var in self._vars:
+                if self._scale is not None:
+                    xr[var].attrs["scales"] = self._scale
+                if self._offset is not None:
+                    xr[var].attrs["offsets"] = self._offset
+
+        print(f"post processed {xr}")
+        return xr
