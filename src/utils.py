@@ -78,13 +78,10 @@ class GeoMADPostProcessor(Processor):
         self._offset = offset
 
     def process(self, xr: Dataset):
-        print(f"post processing {xr}")
         if len(self._vars) != 0:
             for var in self._vars:
                 if self._scale is not None:
                     xr[var].attrs["scales"] = self._scale
                 if self._offset is not None:
                     xr[var].attrs["offsets"] = self._offset
-
-        print(f"post processed {xr}")
         return xr
