@@ -68,6 +68,7 @@ def main(
     all_bands: Annotated[bool, typer.Option()] = True,
     overwrite: Annotated[bool, typer.Option()] = False,
     s2_old_filter: Annotated[bool, typer.Option()] = False,
+    use_s2_collection_one: Annotated[bool, typer.Option()] = False,
     scale: Annotated[float | None, typer.Option()] = None,
     offset: Annotated[float | None, typer.Option()] = None,
     only_tier_one: Annotated[bool, typer.Option()] = True,
@@ -142,7 +143,11 @@ def main(
             filter = [("dilation", 3), ("erosion", 2)]
 
         catalog = "https://earth-search.aws.element84.com/v1/"
+
         collection = "sentinel-2-c1-l2a"
+        if use_s2_collection_one:
+            collection = "sentinel-2-l2a"
+
         ProcessorClass = GeoMADSentinel2Processor
         chunks = dict(time=1, x=xy_chunk_size, y=xy_chunk_size)
         drop_vars = ["scl"]
