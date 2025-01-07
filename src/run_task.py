@@ -145,7 +145,7 @@ def main(
         catalog = "https://earth-search.aws.element84.com/v1/"
 
         collection = "sentinel-2-c1-l2a"
-        if use_s2_collection_one:
+        if not use_s2_collection_one:
             collection = "sentinel-2-l2a"
 
         log.info(f"Using collection {collection}")
