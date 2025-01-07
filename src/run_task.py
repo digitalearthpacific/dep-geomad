@@ -138,9 +138,9 @@ def main(
         else:
             bands = S2_BANDS
 
-        filter = [("erosion", 3), ("dilation", 6)]
+        filters = [("erosion", 3), ("dilation", 6)]
         if s2_old_filter:
-            filter = [("dilation", 3), ("erosion", 2)]
+            filters = [("dilation", 3), ("erosion", 2)]
 
         catalog = "https://earth-search.aws.element84.com/v1/"
 
@@ -148,16 +148,17 @@ def main(
         if use_s2_collection_one:
             collection = "sentinel-2-l2a"
 
+        log.info(f"Using collection {collection}")
+
         ProcessorClass = GeoMADSentinel2Processor
         chunks = dict(time=1, x=xy_chunk_size, y=xy_chunk_size)
         drop_vars = ["scl"]
-        filters = filter
     else:
         raise Exception("Only LS is supported at the moment")
 
     searcher = PystacSearcher(
         catalog=catalog,
-        collections=collection,
+        collections=[collection],
         datetime=datetime,
     )
 
