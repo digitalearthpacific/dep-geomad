@@ -68,7 +68,7 @@ def main(
     all_bands: Annotated[bool, typer.Option()] = True,
     overwrite: Annotated[bool, typer.Option()] = False,
     s2_old_filter: Annotated[bool, typer.Option()] = False,
-    use_s2_collection_one: Annotated[bool, typer.Option()] = False,
+    use_s2_collection_one: Annotated[bool, typer.Option()] = True,
     scale: Annotated[float | None, typer.Option()] = None,
     offset: Annotated[float | None, typer.Option()] = None,
     only_tier_one: Annotated[bool, typer.Option()] = True,
