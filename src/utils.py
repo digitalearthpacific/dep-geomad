@@ -2,7 +2,6 @@ from datacube_compute import geomedian_with_mads
 from dep_tools.exceptions import EmptyCollectionError
 from dep_tools.processors import LandsatProcessor, Processor, S2Processor
 from dep_tools.stac_utils import set_stac_properties
-from dep_tools.task import AreaTask
 from xarray import DataArray, Dataset
 
 
@@ -10,7 +9,6 @@ class GeoMADProcessor(Processor):
     def __init__(
         self,
         send_area_to_processor: bool = False,
-        mask_clouds: bool = True,
         load_data_before_writing: bool = True,
         min_timesteps: int = 0,
         geomad_options: dict = {
@@ -18,23 +16,16 @@ class GeoMADProcessor(Processor):
             "work_chunks": (1000, 1000),
             "maxiters": 1000,
         },
-        # For Sentinel-2, the default filters are dilation of 3 and erosion of 2.
-        # This is very conservative, so will let clouds through.
-        # Dilation of 8 and erosion of 6 removes most clouds
-        filters: list | None = [("dilation", 3), ("erosion", 2)],
-        keep_ints: bool = True,
         drop_vars: list[str] = [],
+        preprocessor: Processor | None = None,
+        **kwargs,
     ) -> None:
-        super().__init__(
-            send_area_to_processor,
-            scale_and_offset=False,  # Do scale and offset in geomad code
-            mask_clouds=mask_clouds,
-            mask_clouds_kwargs={"filters": filters, "keep_ints": keep_ints},
-        )
+        super().__init__(send_area_to_processor, **kwargs)
         self.load_data_before_writing = load_data_before_writing
         self.min_timesteps = min_timesteps
         self.geomad_options = geomad_options
         self.drop_vars = drop_vars
+        self.preprocessor = preprocessor
 
     def process(self, xr: DataArray) -> Dataset:
         # Raise an exception if there's not enough data
@@ -43,8 +34,14 @@ class GeoMADProcessor(Processor):
                 f"{xr.time.size} is less than {self.min_timesteps} timesteps"
             )
 
-        xr = super().process(xr)
-        data = xr.drop_vars(self.drop_vars)
+        if self.preprocessor is not None:
+            xr = self.preprocessor.process(xr)
+
+        data = xr
+
+        if len(self.drop_vars) > 0:
+            data = data.drop_vars(self.drop_vars)
+
         geomad = geomedian_with_mads(data, **self.geomad_options)
 
         if self.load_data_before_writing:
@@ -55,9 +52,25 @@ class GeoMADProcessor(Processor):
         return output
 
 
-class GeoMADSentinel2Processor(GeoMADProcessor, S2Processor):
-    def __init__(self, drop_vars=["scl"], **kwargs) -> None:
-        super(GeoMADSentinel2Processor, self).__init__(drop_vars=drop_vars, **kwargs)
+class GeoMADSentinel1Processor(GeoMADProcessor):
+    def __init__(self, **kwargs) -> None:
+        super(GeoMADSentinel1Processor, self).__init__(**kwargs)
+
+
+class GeoMADSentinel2Processor(GeoMADProcessor):
+    def __init__(
+        self,
+        preprocessor_args: dict = {
+            "mask_clouds": True,
+            "mask_clouds_kwargs": [("dilation", 3), ("erosion", 2)],
+            "keep_ints": True,
+        },
+        drop_vars=["scl"],
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            preprocessor=S2Processor(**preprocessor_args), drop_vars=drop_vars, **kwargs
+        )
 
 
 class GeoMADLandsatProcessor(GeoMADProcessor, LandsatProcessor):
