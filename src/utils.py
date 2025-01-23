@@ -33,7 +33,7 @@ class GeoMADProcessor(Processor):
             raise EmptyCollectionError(
                 f"{xr.time.size} is less than {self.min_timesteps} timesteps"
             )
-        
+
         if self.preprocessor is not None:
             xr = self.preprocessor.process(xr)
 
@@ -69,9 +69,7 @@ class GeoMADSentinel2Processor(GeoMADProcessor):
         **kwargs,
     ) -> None:
         super().__init__(
-            preprocessor=S2Processor(**preprocessor_args),
-            drop_vars=drop_vars,
-            **kwargs
+            preprocessor=S2Processor(**preprocessor_args), drop_vars=drop_vars, **kwargs
         )
 
 

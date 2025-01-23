@@ -15,7 +15,11 @@ from dep_tools.task import AwsStacTask as Task
 from dep_tools.writers import AwsDsCogWriter
 from odc.stac import configure_s3_access
 from typing_extensions import Annotated
-from utils import GeoMADPostProcessor, GeoMADSentinel2Processor, GeoMADSentinel1Processor
+from utils import (
+    GeoMADPostProcessor,
+    GeoMADSentinel2Processor,
+    GeoMADSentinel1Processor,
+)
 from planetary_computer import sign_url
 
 S2_BANDS = [
@@ -110,7 +114,7 @@ def main(
         log.info(f"Item already exists at {stac_document}")
         # This is an exit with success
         raise typer.Exit()
-    
+
     search_kwargs = {}
     load_kwargs = {}
     processor_args = {}
@@ -189,14 +193,15 @@ def main(
         raise Exception(f"Base product {base_product} not supported")
 
     searcher = PystacSearcher(
-        catalog=catalog,
-        collections=[collection],
-        datetime=datetime,
-        **search_kwargs
+        catalog=catalog, collections=[collection], datetime=datetime, **search_kwargs
     )
 
     loader = OdcLoader(
-        bands=bands, chunks=chunks, groupby="solar_day", fail_on_error=False, **load_kwargs
+        bands=bands,
+        chunks=chunks,
+        groupby="solar_day",
+        fail_on_error=False,
+        **load_kwargs,
     )
 
     geomad_options = dict(
@@ -215,7 +220,7 @@ def main(
         geomad_options=geomad_options,
         min_timesteps=5,
         drop_vars=drop_vars,
-        **processor_args
+        **processor_args,
     )
 
     # Custom writer so we write multithreaded
