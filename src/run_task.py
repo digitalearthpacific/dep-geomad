@@ -15,7 +15,8 @@ from dep_tools.task import AwsStacTask as Task
 from dep_tools.writers import AwsDsCogWriter
 from odc.stac import configure_s3_access
 from typing_extensions import Annotated
-from utils import GeoMADPostProcessor, GeoMADSentinel2Processor
+from utils import GeoMADPostProcessor, GeoMADSentinel2Processor, GeoMADSentinel1Processor
+from planetary_computer import sign_url
 
 S2_BANDS = [
     "scl",
@@ -67,10 +68,10 @@ def main(
     decimated: bool = False,
     all_bands: Annotated[bool, typer.Option()] = True,
     overwrite: Annotated[bool, typer.Option()] = False,
-    s2_old_filter: Annotated[bool, typer.Option()] = False,
-    use_s2_collection_one: Annotated[bool, typer.Option()] = True,
     scale: Annotated[float | None, typer.Option()] = None,
     offset: Annotated[float | None, typer.Option()] = None,
+    s2_old_filter: Annotated[bool, typer.Option()] = False,
+    use_s2_collection_one: Annotated[bool, typer.Option()] = True,
     only_tier_one: Annotated[bool, typer.Option()] = True,
     fall_back_to_tier_two: Annotated[bool, typer.Option()] = True,
 ) -> None:
@@ -109,6 +110,11 @@ def main(
         log.info(f"Item already exists at {stac_document}")
         # This is an exit with success
         raise typer.Exit()
+    
+    search_kwargs = {}
+    load_kwargs = {}
+    processor_args = {}
+    drop_vars = []
 
     if base_product == "ls":
         raise Exception("Only S2 is supported at the moment")
@@ -132,6 +138,7 @@ def main(
         # ProcessorClass = GeoMADLandsatProcessor
     elif base_product == "s2":
         log.info("Configuring Sentinel-2 process")
+        log.warning("CAREFUL, CODE HAS CHANGED... MAKE SURE IT WORKS!")
 
         if not all_bands:
             bands = ["scl", "red", "green", "blue"]
@@ -141,6 +148,14 @@ def main(
         filters = [("erosion", 3), ("dilation", 6)]
         if s2_old_filter:
             filters = [("dilation", 3), ("erosion", 2)]
+
+        processor_args = {
+            "preprocessor_args": {
+                "mask_clouds": True,
+                "mask_clouds_kwargs": filters,
+                "keep_ints": True,
+            }
+        }
 
         catalog = "https://earth-search.aws.element84.com/v1/"
 
@@ -153,17 +168,35 @@ def main(
         ProcessorClass = GeoMADSentinel2Processor
         chunks = dict(time=1, x=xy_chunk_size, y=xy_chunk_size)
         drop_vars = ["scl"]
+    elif base_product == "s1":
+        log.info("Configuring Sentinel-1 process")
+
+        bands = ["vv", "vh"]
+
+        catalog = "https://planetarycomputer.microsoft.com/api/stac/v1/"
+        collection = "sentinel-1-rtc"
+
+        # Only use descending data
+        query = {"sat:orbit_state": {"eq": "descending"}}
+        search_kwargs = {"query": query}
+
+        # Planetary computer needs URL signing
+        load_kwargs = {"patch_url": sign_url}
+
+        ProcessorClass = GeoMADSentinel1Processor
+        chunks = dict(time=1, x=xy_chunk_size, y=xy_chunk_size)
     else:
-        raise Exception("Only LS is supported at the moment")
+        raise Exception(f"Base product {base_product} not supported")
 
     searcher = PystacSearcher(
         catalog=catalog,
         collections=[collection],
         datetime=datetime,
+        **search_kwargs
     )
 
     loader = OdcLoader(
-        bands=bands, chunks=chunks, groupby="solar_day", fail_on_error=False
+        bands=bands, chunks=chunks, groupby="solar_day", fail_on_error=False, **load_kwargs
     )
 
     geomad_options = dict(
@@ -180,9 +213,9 @@ def main(
 
     processor = ProcessorClass(
         geomad_options=geomad_options,
-        filters=filters,
         min_timesteps=5,
         drop_vars=drop_vars,
+        **processor_args
     )
 
     # Custom writer so we write multithreaded
@@ -201,6 +234,7 @@ def main(
     )
 
     try:
+        # TODO: Shift dask config out to environment variables...
         with dask.config.set(
             {
                 "dataframe.shuffle.method": "p2p",
