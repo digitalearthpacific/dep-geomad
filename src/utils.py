@@ -62,7 +62,7 @@ class GeoMADSentinel2Processor(GeoMADProcessor):
         self,
         preprocessor_args: dict = {
             "mask_clouds": True,
-            "mask_clouds_kwargs": [("dilation", 3), ("erosion", 2)],
+            "mask_clouds_kwargs": {"filters": [("dilation", 3), ("erosion", 2)]},
         },
         drop_vars=["scl"],
         **kwargs,

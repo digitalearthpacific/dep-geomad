@@ -142,7 +142,6 @@ def main(
         # ProcessorClass = GeoMADLandsatProcessor
     elif base_product == "s2":
         log.info("Configuring Sentinel-2 process")
-        log.warning("CAREFUL, CODE HAS CHANGED... MAKE SURE IT WORKS!")
 
         if not all_bands:
             bands = ["scl", "red", "green", "blue"]
@@ -156,7 +155,7 @@ def main(
         processor_args = {
             "preprocessor_args": {
                 "mask_clouds": True,
-                "mask_clouds_kwargs": filters,
+                "mask_clouds_kwargs": {"filters": filters},
             }
         }
 
