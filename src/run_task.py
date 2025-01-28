@@ -157,7 +157,6 @@ def main(
             "preprocessor_args": {
                 "mask_clouds": True,
                 "mask_clouds_kwargs": filters,
-                "keep_ints": True,
             }
         }
 
