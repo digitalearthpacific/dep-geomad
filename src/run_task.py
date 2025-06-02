@@ -82,9 +82,11 @@ def main(
     log = get_logger(tile_id)
     log.info("Starting processing.")
 
-    if base_product == "s2":
+    if base_product in ["s1", "s2"]:
+        log.info("Running at 10 m")
         grid = PACIFIC_GRID_10
     else:
+        log.info("Running at 30 m")
         grid = PACIFIC_GRID_30
 
     tile_index = tuple(int(i) for i in tile_id.split(","))
