@@ -56,6 +56,39 @@ class GeoMADSentinel1Processor(GeoMADProcessor):
     def __init__(self, **kwargs) -> None:
         super(GeoMADSentinel1Processor, self).__init__(**kwargs)
 
+    def process(self, xr: DataArray) -> Dataset:
+        # Raise an exception if there's not enough data
+        if xr.time.size < self.min_timesteps:
+            raise EmptyCollectionError(
+                f"{xr.time.size} is less than {self.min_timesteps} timesteps"
+            )
+
+        if self.preprocessor is not None:
+            xr = self.preprocessor.process(xr)
+
+        data = xr
+
+        if len(self.drop_vars) > 0:
+            data = data.drop_vars(self.drop_vars)
+
+        # First compute the mean and standard deviation
+        data = data.compute()  # Load into memory, so we only do it once
+        stats = {}
+        for var in ["vv", "vh"]:
+            stats[f"mean_{var}"] = data[var].mean(dim="time", skipna=True)
+            stats[f"stdev_{var}"] = data[var].std(dim="time", skipna=True)
+        geomad = geomedian_with_mads(data, **self.geomad_options)
+
+        # APpend the computed statistics to the geomad output
+        geomad = geomad.assign(stats)
+
+        if self.load_data_before_writing:
+            geomad = geomad.compute()
+
+        output = set_stac_properties(data, geomad)
+
+        return output
+
 
 class GeoMADSentinel2Processor(GeoMADProcessor):
     def __init__(
