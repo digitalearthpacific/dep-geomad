@@ -183,7 +183,7 @@ def main(
         # Only use descending data
         query = {
             "sat:orbit_state": {"eq": "descending"},
-            "s1:orbit_source": {"eq": "RESORB"},
+            "sar:polarizations": {"eq": ["VV", "VH"]},  # Use only VV and VH polarizations
         }
         search_kwargs = {"query": query}
 
