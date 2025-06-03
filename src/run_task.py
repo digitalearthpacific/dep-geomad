@@ -181,7 +181,10 @@ def main(
         collection = "sentinel-1-rtc"
 
         # Only use descending data
-        query = {"sat:orbit_state": {"eq": "descending"}}
+        query = {
+            "sat:orbit_state": {"eq": "descending"},
+            "s1:orbit_source": {"eq": "RESORB"},
+        }
         search_kwargs = {"query": query}
 
         # Planetary computer needs URL signing
