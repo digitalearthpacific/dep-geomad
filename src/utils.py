@@ -47,6 +47,9 @@ class GeoMADProcessor(Processor):
         if self.load_data_before_writing:
             geomad = geomad.compute()
 
+        # Add nodata as 0 to the count variable
+        geomad["count"].odc.nodata = 0
+
         output = set_stac_properties(data, geomad)
 
         return output
@@ -79,11 +82,14 @@ class GeoMADSentinel1Processor(GeoMADProcessor):
             stats[f"stdev_{var}"] = data[var].std(dim="time", skipna=True)
         geomad = geomedian_with_mads(data, **self.geomad_options)
 
-        # APpend the computed statistics to the geomad output
+        # Append the computed statistics to the geomad output
         geomad = geomad.assign(stats)
 
         if self.load_data_before_writing:
             geomad = geomad.compute()
+
+        # Add nodata as 0 to the count variable
+        geomad["count"].odc.nodata = 0
 
         output = set_stac_properties(data, geomad)
 
