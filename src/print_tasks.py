@@ -11,6 +11,7 @@ from dep_tools.namers import S3ItemPath
 from dep_tools.searchers import PystacSearcher
 from dep_tools.exceptions import EmptyCollectionError
 
+
 def main(
     years: Annotated[str, typer.Option()],
     version: Annotated[str, typer.Option()],
@@ -71,7 +72,7 @@ def main(
                     searcher = PystacSearcher(
                         catalog="https://earth-search.aws.element84.com/v1",
                         collections=["sentinel-2-l2a"],
-                        datetime=str(task["year"])
+                        datetime=str(task["year"]),
                     )
                     grid = PACIFIC_GRID_10
                     tile_index = tuple(int(i) for i in task["tile-id"].split(","))
