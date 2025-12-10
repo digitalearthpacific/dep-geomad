@@ -233,7 +233,7 @@ def main(
 
     # STAC making thing
     stac_creator = StacCreator(
-        itempath=itempath, remote=True, make_hrefs_https=True, with_raster=True
+        itempath=itempath, with_raster=True
     )
 
     post_processor = GeoMADPostProcessor(
