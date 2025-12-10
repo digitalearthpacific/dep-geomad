@@ -232,9 +232,7 @@ def main(
     writer = AwsDsCogWriter(itempath, write_multithreaded=True)
 
     # STAC making thing
-    stac_creator = StacCreator(
-        itempath=itempath, with_raster=True
-    )
+    stac_creator = StacCreator(itempath=itempath, with_raster=True)
 
     post_processor = GeoMADPostProcessor(
         vars=bands,
