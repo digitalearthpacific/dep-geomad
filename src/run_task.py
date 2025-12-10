@@ -157,7 +157,10 @@ def main(
         processor_args = {
             "preprocessor_args": {
                 "mask_clouds": True,
-                "mask_clouds_kwargs": {"filters": filters},
+                "mask_clouds_kwargs": {
+                    "filters": filters,
+                    "keep_ints": True,
+                },
             }
         }
 
@@ -284,7 +287,7 @@ def main(
         raise typer.Exit(code=1)
 
     log.info(
-        f"Completed processing. Wrote {len(paths)} items to https://{output_bucket}.s3.us-west-2.amazonaws.com/{ stac_document}"
+        f"Completed processing. Wrote {len(paths)} items to https://{output_bucket}.s3.us-west-2.amazonaws.com/{stac_document}"
     )
 
 
