@@ -33,12 +33,7 @@ def get_tiles_for_countries(country_codes, buffer_distance=None, resolution=30):
     )
 
     gridspec = grid(resolution=resolution)
-    geo_dict = (
-        geometries.to_crs(PACIFIC_EPSG)
-        .simplify(0.1)
-        .to_frame()
-        .to_geo_dict()
-    )
+    geo_dict = geometries.to_crs(PACIFIC_EPSG).simplify(0.1).to_frame().to_geo_dict()
     geometry = Geometry(geo_dict, crs=PACIFIC_EPSG)
     geometry = geometry.buffer(buffer_distance if buffer_distance is not None else 0.0)
     return gridspec.tiles_from_geopolygon(geopolygon=geometry)
@@ -68,8 +63,9 @@ def _has_s2_data(tile_index, year):
         return len(results) > 0
 
 
-def _get_existing_stac_paths(output_bucket, base_product, version, output_prefix,
-                             years, full_path_prefix, tasks):
+def _get_existing_stac_paths(
+    output_bucket, base_product, version, output_prefix, years, full_path_prefix, tasks
+):
     """Check which tasks already have outputs using concurrent HEAD requests."""
     import threading
     from dep_tools.aws import object_exists
@@ -109,20 +105,25 @@ def _filter_existing_tasks(
     """Filter tasks, keeping only those that need processing."""
     # Resolve bucket region once, to avoid a head_bucket call per task
     from dep_tools.aws import get_s3_bucket_region
+
     aws_region = get_s3_bucket_region(output_bucket)
     full_path_prefix = f"https://{output_bucket}.s3.{aws_region}.amazonaws.com/"
 
     # Check S3 existence concurrently (50 workers for fast HEAD requests)
     years = set(str(t["year"]) for t in tasks)
     existing = _get_existing_stac_paths(
-        output_bucket, base_product, version, output_prefix,
-        years, full_path_prefix, tasks
+        output_bucket,
+        base_product,
+        version,
+        output_prefix,
+        years,
+        full_path_prefix,
+        tasks,
     )
 
     # Filter out tasks that already exist
     remaining_tasks = [
-        t for t in tasks
-        if (t["tile-id"], str(t["year"])) not in existing
+        t for t in tasks if (t["tile-id"], str(t["year"])) not in existing
     ]
 
     if not check_stac:
@@ -137,7 +138,7 @@ def _filter_existing_tasks(
             executor.submit(
                 _has_s2_data,
                 tuple(int(i) for i in task["tile-id"].split(",")),
-                task["year"]
+                task["year"],
             ): task
             for task in remaining_tasks
         }
@@ -163,9 +164,12 @@ def main(
     ] = None,
     output_prefix: Optional[str] = None,
     overwrite: Annotated[bool, typer.Option()] = False,
-    check_stac: Annotated[bool, typer.Option(
-        help="Check STAC API for data existence before adding a tile to the task list."
-    )] = False,
+    check_stac: Annotated[
+        bool,
+        typer.Option(
+            help="Check STAC API for data existence before adding a tile to the task list."
+        ),
+    ] = False,
 ) -> None:
     country_codes = None if regions.upper() == "ALL" else regions.split(",")
 
@@ -174,9 +178,7 @@ def main(
             country_codes, buffer_distance=tile_buffer_kms * 1000
         )
     else:
-        tiles = get_tiles(
-            country_codes=None, buffer_distance=tile_buffer_kms * 1000
-        )
+        tiles = get_tiles(country_codes=None, buffer_distance=tile_buffer_kms * 1000)
 
     if limit is not None:
         limit = int(limit)
@@ -201,7 +203,12 @@ def main(
     # i.e., they failed in the past or they're missing for some other reason
     if not overwrite:
         tasks = _filter_existing_tasks(
-            tasks, output_bucket, base_product, version, output_prefix, limit,
+            tasks,
+            output_bucket,
+            base_product,
+            version,
+            output_prefix,
+            limit,
             check_stac,
         )
     else:
