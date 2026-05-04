@@ -75,7 +75,7 @@ def main(
     scale: Annotated[float | None, typer.Option()] = None,
     offset: Annotated[float | None, typer.Option()] = None,
     s2_old_filter: Annotated[bool, typer.Option()] = False,
-    use_s2_collection_one: Annotated[bool, typer.Option()] = True,
+    use_collection_one: Annotated[bool, typer.Option()] = False,
     only_tier_one: Annotated[bool, typer.Option()] = True,
     fall_back_to_tier_two: Annotated[bool, typer.Option()] = True,
 ) -> None:
@@ -166,9 +166,9 @@ def main(
 
         catalog = "https://earth-search.aws.element84.com/v1/"
 
-        collection = "sentinel-2-c1-l2a"
-        if not use_s2_collection_one:
-            collection = "sentinel-2-l2a"
+        collection = "sentinel-2-l2a"
+        if use_collection_one:
+            collection = "sentinel-2-c1-l2a"
 
         log.info(f"Using collection {collection}")
 
