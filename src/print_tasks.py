@@ -1,5 +1,6 @@
 import json
 import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from itertools import product
 from typing import Annotated, Optional
@@ -8,6 +9,7 @@ import boto3
 import geopandas as gpd
 import pandas as pd
 import typer
+from dep_tools.aws import get_s3_bucket_region, object_exists
 from dep_tools.grids import (
     PACIFIC_EPSG,
     PACIFIC_GRID_10,
@@ -18,6 +20,18 @@ from dep_tools.namers import S3ItemPath
 from dep_tools.utils import bbox_across_180
 from odc.geo import Geometry
 from pystac_client import Client as StacClient
+
+# Catalog and collection settings per base product, matching run_task.py
+STAC_SETTINGS = {
+    "s2": {
+        "catalog": "https://earth-search.aws.element84.com/v1",
+        "collections": ["sentinel-2-l2a"],
+    },
+    "s1": {
+        "catalog": "https://planetarycomputer.microsoft.com/api/stac/v1/",
+        "collections": ["sentinel-1-rtc"],
+    },
+}
 
 
 def get_tiles_for_countries(country_codes, buffer_distance=None, resolution=30):
@@ -39,20 +53,23 @@ def get_tiles_for_countries(country_codes, buffer_distance=None, resolution=30):
     return gridspec.tiles_from_geopolygon(geopolygon=geometry)
 
 
-def _has_s2_data(tile_index, year):
-    """Fast check for S2 data existence using max_items=1 instead of fetching all."""
+def _has_stac_data(tile_index, year, base_product):
+    """Fast check for data existence using max_items=1."""
+    if base_product not in STAC_SETTINGS:
+        return True
+
+    settings = STAC_SETTINGS[base_product]
     geobox = PACIFIC_GRID_10.tile_geobox(tile_index)
     bbox = bbox_across_180(geobox)
-    client = StacClient.open("https://earth-search.aws.element84.com/v1")
+    client = StacClient.open(settings["catalog"])
 
     search_kwargs = dict(
-        collections=["sentinel-2-l2a"],
+        collections=settings["collections"],
         datetime=str(year),
         max_items=1,
     )
 
     if isinstance(bbox, tuple):
-        # Antimeridian crossing: check both sides
         for b in bbox:
             results = list(client.search(bbox=b, **search_kwargs).items())
             if len(results) > 0:
@@ -63,13 +80,10 @@ def _has_s2_data(tile_index, year):
         return len(results) > 0
 
 
-def _get_existing_stac_paths(
-    output_bucket, base_product, version, output_prefix, years, full_path_prefix, tasks
-):
-    """Check which tasks already have outputs using concurrent HEAD requests."""
-    import threading
-    from dep_tools.aws import object_exists
-
+def _find_existing_tasks(tasks, output_bucket, base_product, version,
+                         output_prefix, full_path_prefix, limit):
+    """Check which tasks already have outputs using concurrent HEAD requests.
+    Stops early once enough non-existing tasks are found to satisfy limit."""
     thread_local = threading.local()
 
     def _get_client():
@@ -89,61 +103,41 @@ def _get_existing_stac_paths(
         stac_path = itempath.stac_path(task["tile-id"].split(","))
         if output_prefix is not None:
             stac_path = f"{output_prefix}/{stac_path}"
-        return (task, object_exists(output_bucket, stac_path, client=_get_client()))
+        return object_exists(output_bucket, stac_path, client=_get_client())
 
     existing = set()
+    non_existing_count = 0
     with ThreadPoolExecutor(max_workers=50) as executor:
-        for task, exists in executor.map(_check_exists, tasks):
-            if exists:
+        future_to_task = {
+            executor.submit(_check_exists, task): task for task in tasks
+        }
+        for future in as_completed(future_to_task):
+            task = future_to_task[future]
+            if future.result():
                 existing.add((task["tile-id"], str(task["year"])))
+            else:
+                non_existing_count += 1
+                if limit is not None and non_existing_count >= limit:
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    break
     return existing
 
 
-def _filter_existing_tasks(
-    tasks, output_bucket, base_product, version, output_prefix, limit, check_stac
-):
-    """Filter tasks, keeping only those that need processing."""
-    # Resolve bucket region once, to avoid a head_bucket call per task
-    from dep_tools.aws import get_s3_bucket_region
-
-    aws_region = get_s3_bucket_region(output_bucket)
-    full_path_prefix = f"https://{output_bucket}.s3.{aws_region}.amazonaws.com/"
-
-    # Check S3 existence concurrently (50 workers for fast HEAD requests)
-    years = set(str(t["year"]) for t in tasks)
-    existing = _get_existing_stac_paths(
-        output_bucket,
-        base_product,
-        version,
-        output_prefix,
-        years,
-        full_path_prefix,
-        tasks,
-    )
-
-    # Filter out tasks that already exist
-    remaining_tasks = [
-        t for t in tasks if (t["tile-id"], str(t["year"])) not in existing
-    ]
-
-    if not check_stac:
-        if limit is not None:
-            remaining_tasks = remaining_tasks[:limit]
-        return remaining_tasks
-
-    # With STAC checks, run concurrently
+def _filter_stac(tasks, base_product, limit):
+    """Filter tasks by STAC data existence, concurrently with early termination."""
     valid_tasks = []
     with ThreadPoolExecutor(max_workers=20) as executor:
-        futures = {
+        future_to_task = {
             executor.submit(
-                _has_s2_data,
+                _has_stac_data,
                 tuple(int(i) for i in task["tile-id"].split(",")),
                 task["year"],
+                base_product,
             ): task
-            for task in remaining_tasks
+            for task in tasks
         }
-        for future in as_completed(futures):
-            task = futures[future]
+        for future in as_completed(future_to_task):
+            task = future_to_task[future]
             if future.result():
                 valid_tasks.append(task)
                 if limit is not None and len(valid_tasks) >= limit:
@@ -199,21 +193,23 @@ def main(
         for tile, year in product(list(tiles), years)
     ]
 
-    # If we don't want to overwrite, then we should only run tasks that don't already exist
-    # i.e., they failed in the past or they're missing for some other reason
-    if not overwrite:
-        tasks = _filter_existing_tasks(
-            tasks,
-            output_bucket,
-            base_product,
-            version,
-            output_prefix,
-            limit,
-            check_stac,
+    # Filter out tasks whose output already exists in S3
+    if not overwrite and output_bucket is not None:
+        aws_region = get_s3_bucket_region(output_bucket)
+        full_path_prefix = f"https://{output_bucket}.s3.{aws_region}.amazonaws.com/"
+
+        existing = _find_existing_tasks(
+            tasks, output_bucket, base_product, version,
+            output_prefix, full_path_prefix, limit,
         )
-    else:
-        # If we are overwriting, we just keep going
-        pass
+        tasks = [
+            t for t in tasks
+            if (t["tile-id"], str(t["year"])) not in existing
+        ]
+
+    # Filter out tiles with no source data in the STAC catalog
+    if check_stac:
+        tasks = _filter_stac(tasks, base_product, limit)
 
     if limit is not None:
         tasks = tasks[0:limit]
