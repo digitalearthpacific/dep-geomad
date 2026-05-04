@@ -1,15 +1,122 @@
 import json
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from itertools import product
 from typing import Annotated, Optional
 
 import boto3
+import geopandas as gpd
+import pandas as pd
 import typer
 from dep_tools.aws import object_exists
-from dep_tools.grids import PACIFIC_GRID_10, get_tiles
+from dep_tools.grids import (
+    PACIFIC_EPSG,
+    PACIFIC_GRID_10,
+    get_tiles,
+    grid,
+)
 from dep_tools.namers import S3ItemPath
-from dep_tools.searchers import PystacSearcher
-from dep_tools.exceptions import EmptyCollectionError
+from dep_tools.utils import bbox_across_180
+from odc.geo import Geometry
+from pystac_client import Client as StacClient
+
+
+def get_tiles_for_countries(country_codes, buffer_distance=None, resolution=30):
+    """Fetch tiles for specific countries, downloading only their GADM data."""
+    geometries = pd.concat(
+        [
+            gpd.read_file(
+                f"https://geodata.ucdavis.edu/gadm/gadm4.1/gpkg/gadm41_{code}.gpkg",
+                layer="ADM_ADM_0",
+            )
+            for code in country_codes
+        ]
+    )
+
+    gridspec = grid(resolution=resolution)
+    geo_dict = (
+        geometries.to_crs(PACIFIC_EPSG)
+        .simplify(0.1)
+        .to_frame()
+        .to_geo_dict()
+    )
+    geometry = Geometry(geo_dict, crs=PACIFIC_EPSG)
+    geometry = geometry.buffer(buffer_distance if buffer_distance is not None else 0.0)
+    return gridspec.tiles_from_geopolygon(geopolygon=geometry)
+
+
+def _has_s2_data(tile_index, year):
+    """Fast check for S2 data existence using max_items=1 instead of fetching all."""
+    geobox = PACIFIC_GRID_10.tile_geobox(tile_index)
+    bbox = bbox_across_180(geobox)
+    client = StacClient.open("https://earth-search.aws.element84.com/v1")
+
+    search_kwargs = dict(
+        collections=["sentinel-2-l2a"],
+        datetime=str(year),
+        max_items=1,
+    )
+
+    if isinstance(bbox, tuple):
+        # Antimeridian crossing: check both sides
+        for b in bbox:
+            results = list(client.search(bbox=b, **search_kwargs).items())
+            if len(results) > 0:
+                return True
+        return False
+    else:
+        results = list(client.search(bbox=bbox, **search_kwargs).items())
+        return len(results) > 0
+
+
+def _check_task(task, output_bucket, base_product, version, output_prefix, check_stac):
+    """Check if a task needs processing. Returns the task if valid, None otherwise."""
+    itempath = S3ItemPath(
+        bucket=output_bucket,
+        sensor=base_product,
+        dataset_id="geomad",
+        version=version,
+        time=task["year"],
+    )
+    stac_path = itempath.stac_path(task["tile-id"].split(","))
+
+    if output_prefix is not None:
+        stac_path = f"{output_prefix}/{stac_path}"
+
+    # Each thread gets its own boto3 client (not thread-safe to share)
+    client = boto3.client("s3")
+    if object_exists(output_bucket, stac_path, client=client):
+        return None
+
+    if check_stac and base_product == "s2":
+        tile_index = tuple(int(i) for i in task["tile-id"].split(","))
+        if not _has_s2_data(tile_index, task["year"]):
+            return None
+
+    return task
+
+
+def _filter_existing_tasks(
+    tasks, output_bucket, base_product, version, output_prefix, limit, check_stac
+):
+    """Filter tasks concurrently, keeping only those that need processing."""
+    valid_tasks = []
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        futures = {
+            executor.submit(
+                _check_task, task, output_bucket, base_product, version,
+                output_prefix, check_stac
+            ): task
+            for task in tasks
+        }
+        for future in as_completed(futures):
+            result = future.result()
+            if result is not None:
+                valid_tasks.append(result)
+                if limit is not None and len(valid_tasks) >= limit:
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    break
+    return valid_tasks
 
 
 def main(
@@ -19,15 +126,25 @@ def main(
     tile_buffer_kms: Optional[int] = 0.0,
     limit: Optional[str] = None,
     base_product: str = "ls",
-    output_bucket: Optional[str] = None,
+    output_bucket: Annotated[
+        Optional[str], typer.Option("--output-bucket", "--bucket")
+    ] = None,
     output_prefix: Optional[str] = None,
     overwrite: Annotated[bool, typer.Option()] = False,
+    check_stac: Annotated[bool, typer.Option(
+        help="Check STAC API for data existence before adding a tile to the task list."
+    )] = False,
 ) -> None:
     country_codes = None if regions.upper() == "ALL" else regions.split(",")
 
-    tiles = get_tiles(
-        country_codes=country_codes, buffer_distance=tile_buffer_kms * 1000
-    )
+    if country_codes is not None:
+        tiles = get_tiles_for_countries(
+            country_codes, buffer_distance=tile_buffer_kms * 1000
+        )
+    else:
+        tiles = get_tiles(
+            country_codes=None, buffer_distance=tile_buffer_kms * 1000
+        )
 
     if limit is not None:
         limit = int(limit)
@@ -51,41 +168,10 @@ def main(
     # If we don't want to overwrite, then we should only run tasks that don't already exist
     # i.e., they failed in the past or they're missing for some other reason
     if not overwrite:
-        valid_tasks = []
-        client = boto3.client("s3")
-        for task in tasks:
-            itempath = S3ItemPath(
-                bucket=output_bucket,
-                sensor=base_product,
-                dataset_id="geomad",
-                version=version,
-                time=task["year"],
-            )
-            stac_path = itempath.stac_path(task["tile-id"].split(","))
-
-            if output_prefix is not None:
-                stac_path = f"{output_prefix}/{stac_path}"
-
-            if not object_exists(output_bucket, stac_path, client=client):
-                # Check there is data there to process
-                if base_product == "s2":
-                    searcher = PystacSearcher(
-                        catalog="https://earth-search.aws.element84.com/v1",
-                        collections=["sentinel-2-l2a"],
-                        datetime=str(task["year"]),
-                    )
-                    grid = PACIFIC_GRID_10
-                    tile_index = tuple(int(i) for i in task["tile-id"].split(","))
-                    geobox = grid.tile_geobox(tile_index)
-                    try:
-                        searcher.search(area=geobox)
-                    except EmptyCollectionError:
-                        continue
-                valid_tasks.append(task)
-            if len(valid_tasks) == limit:
-                break
-        # Switch to this list of tasks, which has been filtered
-        tasks = valid_tasks
+        tasks = _filter_existing_tasks(
+            tasks, output_bucket, base_product, version, output_prefix, limit,
+            check_stac,
+        )
     else:
         # If we are overwriting, we just keep going
         pass
