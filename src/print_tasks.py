@@ -80,8 +80,9 @@ def _has_stac_data(tile_index, year, base_product):
         return len(results) > 0
 
 
-def _find_existing_tasks(tasks, output_bucket, base_product, version,
-                         output_prefix, full_path_prefix, limit):
+def _find_existing_tasks(
+    tasks, output_bucket, base_product, version, output_prefix, full_path_prefix, limit
+):
     """Check which tasks already have outputs using concurrent HEAD requests.
     Stops early once enough non-existing tasks are found to satisfy limit."""
     thread_local = threading.local()
@@ -108,9 +109,7 @@ def _find_existing_tasks(tasks, output_bucket, base_product, version,
     existing = set()
     non_existing_count = 0
     with ThreadPoolExecutor(max_workers=50) as executor:
-        future_to_task = {
-            executor.submit(_check_exists, task): task for task in tasks
-        }
+        future_to_task = {executor.submit(_check_exists, task): task for task in tasks}
         for future in as_completed(future_to_task):
             task = future_to_task[future]
             if future.result():
@@ -199,13 +198,15 @@ def main(
         full_path_prefix = f"https://{output_bucket}.s3.{aws_region}.amazonaws.com/"
 
         existing = _find_existing_tasks(
-            tasks, output_bucket, base_product, version,
-            output_prefix, full_path_prefix, limit,
+            tasks,
+            output_bucket,
+            base_product,
+            version,
+            output_prefix,
+            full_path_prefix,
+            limit,
         )
-        tasks = [
-            t for t in tasks
-            if (t["tile-id"], str(t["year"])) not in existing
-        ]
+        tasks = [t for t in tasks if (t["tile-id"], str(t["year"])) not in existing]
 
     # Filter out tiles with no source data in the STAC catalog
     if check_stac:
