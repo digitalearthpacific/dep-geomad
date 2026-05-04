@@ -8,7 +8,6 @@ import boto3
 import geopandas as gpd
 import pandas as pd
 import typer
-from dep_tools.aws import object_exists
 from dep_tools.grids import (
     PACIFIC_EPSG,
     PACIFIC_GRID_10,
@@ -69,50 +68,83 @@ def _has_s2_data(tile_index, year):
         return len(results) > 0
 
 
-def _check_task(task, output_bucket, base_product, version, output_prefix, check_stac):
-    """Check if a task needs processing. Returns the task if valid, None otherwise."""
-    itempath = S3ItemPath(
-        bucket=output_bucket,
-        sensor=base_product,
-        dataset_id="geomad",
-        version=version,
-        time=task["year"],
-    )
-    stac_path = itempath.stac_path(task["tile-id"].split(","))
+def _get_existing_stac_paths(output_bucket, base_product, version, output_prefix,
+                             years, full_path_prefix, tasks):
+    """Check which tasks already have outputs using concurrent HEAD requests."""
+    import threading
+    from dep_tools.aws import object_exists
 
-    if output_prefix is not None:
-        stac_path = f"{output_prefix}/{stac_path}"
+    thread_local = threading.local()
 
-    # Each thread gets its own boto3 client (not thread-safe to share)
-    client = boto3.client("s3")
-    if object_exists(output_bucket, stac_path, client=client):
-        return None
+    def _get_client():
+        if not hasattr(thread_local, "client"):
+            thread_local.client = boto3.client("s3")
+        return thread_local.client
 
-    if check_stac and base_product == "s2":
-        tile_index = tuple(int(i) for i in task["tile-id"].split(","))
-        if not _has_s2_data(tile_index, task["year"]):
-            return None
+    def _check_exists(task):
+        itempath = S3ItemPath(
+            bucket=output_bucket,
+            sensor=base_product,
+            dataset_id="geomad",
+            version=version,
+            time=task["year"],
+            full_path_prefix=full_path_prefix,
+        )
+        stac_path = itempath.stac_path(task["tile-id"].split(","))
+        if output_prefix is not None:
+            stac_path = f"{output_prefix}/{stac_path}"
+        return (task, object_exists(output_bucket, stac_path, client=_get_client()))
 
-    return task
+    existing = set()
+    with ThreadPoolExecutor(max_workers=50) as executor:
+        for task, exists in executor.map(_check_exists, tasks):
+            if exists:
+                existing.add((task["tile-id"], str(task["year"])))
+    return existing
 
 
 def _filter_existing_tasks(
     tasks, output_bucket, base_product, version, output_prefix, limit, check_stac
 ):
-    """Filter tasks concurrently, keeping only those that need processing."""
+    """Filter tasks, keeping only those that need processing."""
+    # Resolve bucket region once, to avoid a head_bucket call per task
+    from dep_tools.aws import get_s3_bucket_region
+    aws_region = get_s3_bucket_region(output_bucket)
+    full_path_prefix = f"https://{output_bucket}.s3.{aws_region}.amazonaws.com/"
+
+    # Check S3 existence concurrently (50 workers for fast HEAD requests)
+    years = set(str(t["year"]) for t in tasks)
+    existing = _get_existing_stac_paths(
+        output_bucket, base_product, version, output_prefix,
+        years, full_path_prefix, tasks
+    )
+
+    # Filter out tasks that already exist
+    remaining_tasks = [
+        t for t in tasks
+        if (t["tile-id"], str(t["year"])) not in existing
+    ]
+
+    if not check_stac:
+        if limit is not None:
+            remaining_tasks = remaining_tasks[:limit]
+        return remaining_tasks
+
+    # With STAC checks, run concurrently
     valid_tasks = []
     with ThreadPoolExecutor(max_workers=20) as executor:
         futures = {
             executor.submit(
-                _check_task, task, output_bucket, base_product, version,
-                output_prefix, check_stac
+                _has_s2_data,
+                tuple(int(i) for i in task["tile-id"].split(",")),
+                task["year"]
             ): task
-            for task in tasks
+            for task in remaining_tasks
         }
         for future in as_completed(futures):
-            result = future.result()
-            if result is not None:
-                valid_tasks.append(result)
+            task = futures[future]
+            if future.result():
+                valid_tasks.append(task)
                 if limit is not None and len(valid_tasks) >= limit:
                     executor.shutdown(wait=False, cancel_futures=True)
                     break
