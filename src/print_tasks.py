@@ -71,7 +71,9 @@ def _load_cached_tiles():
             else:
                 indices.append((col, item))
 
-    return [((col, row), PACIFIC_GRID_10.tile_geobox((col, row))) for col, row in indices]
+    return [
+        ((col, row), PACIFIC_GRID_10.tile_geobox((col, row))) for col, row in indices
+    ]
 
 
 def _has_stac_data(tile_index, year, base_product):
