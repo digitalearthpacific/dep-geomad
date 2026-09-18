@@ -3,6 +3,7 @@ import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from itertools import product
+from pathlib import Path
 from typing import Annotated, Optional
 
 import boto3
@@ -20,6 +21,8 @@ from dep_tools.namers import S3ItemPath
 from dep_tools.utils import bbox_across_180
 from odc.geo import Geometry
 from pystac_client import Client as StacClient
+
+_CACHED_TILES_FILE = Path(__file__).parent / "all_tiles_300km.json"
 
 # Catalog and collection settings per base product, matching run_task.py
 STAC_SETTINGS = {
@@ -51,6 +54,26 @@ def get_tiles_for_countries(country_codes, buffer_distance=None, resolution=30):
     geometry = Geometry(geo_dict, crs=PACIFIC_EPSG)
     geometry = geometry.buffer(buffer_distance if buffer_distance is not None else 0.0)
     return gridspec.tiles_from_geopolygon(geopolygon=geometry)
+
+
+def _load_cached_tiles():
+    """Load pre-computed ALL/300km tile indices from JSON, returning (col, row) geoboxes."""
+    with open(_CACHED_TILES_FILE) as f:
+        data = json.load(f)
+
+    indices = []
+    for col_str, encoded_rows in data.items():
+        col = int(col_str)
+        for item in encoded_rows:
+            if isinstance(item, list):
+                for row in range(item[0], item[1] + 1):
+                    indices.append((col, row))
+            else:
+                indices.append((col, item))
+
+    return [
+        ((col, row), PACIFIC_GRID_10.tile_geobox((col, row))) for col, row in indices
+    ]
 
 
 def _has_stac_data(tile_index, year, base_product):
@@ -166,7 +189,10 @@ def main(
 ) -> None:
     country_codes = None if regions.upper() == "ALL" else regions.split(",")
 
-    if country_codes is not None:
+    # Use pre-computed tile list for the common ALL/300km case
+    if country_codes is None and tile_buffer_kms == 300:
+        tiles = _load_cached_tiles()
+    elif country_codes is not None:
         tiles = get_tiles_for_countries(
             country_codes, buffer_distance=tile_buffer_kms * 1000
         )
