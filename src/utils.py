@@ -6,10 +6,15 @@ from xarray import DataArray, Dataset
 from odc.algo import mask_cleanup, erase_bad
 
 
-def mask_clouds(xr: DataArray, mask_filters: dict, mask_high_values: bool = True, return_mask: bool = False) -> DataArray:
+def mask_clouds(
+    xr: DataArray,
+    mask_filters: dict,
+    mask_high_values: bool = True,
+    return_mask: bool = False,
+) -> DataArray:
     """Takes a dictionary of value to a list of functions to mask that value in the scl
     band of the input xarray. Do this in the Datacubey way...
-    
+
     Example mask_filters: {"cloud shadows":[["dilation", 5]], "cloud medium probability":[["opening", 5], ["dilation", 5]], "cloud high probability":[["opening", 5], ["dilation", 5]], "thin cirrus":[["dilation", 5]]}
     """
     SCL_VALUE_LOOKUP = {
@@ -18,7 +23,7 @@ def mask_clouds(xr: DataArray, mask_filters: dict, mask_high_values: bool = True
         "cloud high probability": 9,
         "thin cirrus": 10,
     }
-    
+
     scl = xr["scl"]
 
     # Maintain nodata (0)
@@ -36,13 +41,18 @@ def mask_clouds(xr: DataArray, mask_filters: dict, mask_high_values: bool = True
     # Exclude pixels where R, G and B are > THRESHOLD (these are likely to be clouds)
     THRESHOLD = 4000
     if mask_high_values:
-        high_values = (xr["green"] > THRESHOLD) & (xr["red"] > THRESHOLD) & (xr["blue"] > THRESHOLD)
+        high_values = (
+            (xr["green"] > THRESHOLD)
+            & (xr["red"] > THRESHOLD)
+            & (xr["blue"] > THRESHOLD)
+        )
         mask = mask | high_values
 
     if return_mask:
         return erase_bad(xr, mask), mask
     else:
         return erase_bad(xr, mask)
+
 
 class GeoMADProcessor(Processor):
     def __init__(
@@ -75,7 +85,12 @@ class GeoMADSentinel2Processor(GeoMADProcessor):
     def __init__(
         self,
         drop_vars: list[str] = ["scl"],
-        mask_filters: dict = {"cloud shadows":[["dilation", 5]], "cloud medium probability":[["opening", 5], ["dilation", 5]], "cloud high probability":[["opening", 5], ["dilation", 5]], "thin cirrus":[["dilation", 5]]},
+        mask_filters: dict = {
+            "cloud shadows": [["dilation", 5]],
+            "cloud medium probability": [["opening", 5], ["dilation", 5]],
+            "cloud high probability": [["opening", 5], ["dilation", 5]],
+            "thin cirrus": [["dilation", 5]],
+        },
         mask_high_values: bool = True,
         scale_and_offset: bool = False,
     ) -> None:
@@ -85,8 +100,9 @@ class GeoMADSentinel2Processor(GeoMADProcessor):
         self.scale_and_offset = scale_and_offset
 
     def _mask_clouds(self, xr: DataArray) -> DataArray:
-        return mask_clouds(xr, mask_filters=self.mask_filters, mask_high_values=self.mask_high_values)
-
+        return mask_clouds(
+            xr, mask_filters=self.mask_filters, mask_high_values=self.mask_high_values
+        )
 
     def process(self, xr: DataArray) -> Dataset:
         # Raise an exception if there's not enough data
