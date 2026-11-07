@@ -89,7 +89,8 @@ def main() -> None:
         title = name.replace("_", " ").title()
         old_rel = f"output/{old_path.name}"
         new_rel = f"output/{new_path.name}"
-        sections.append(f"""
+        sections.append(
+            f"""
 <h2>{title}</h2>
 <div class="slider-container">
   <img class="img-new" src="{new_rel}" draggable="false">
@@ -101,7 +102,8 @@ def main() -> None:
   <span class="label label-old">OLD</span>
   <span class="label label-new">NEW</span>
 </div>
-""")
+"""
+        )
 
     html = f"""<!DOCTYPE html>
 <html>
