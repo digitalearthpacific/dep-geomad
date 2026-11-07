@@ -32,13 +32,15 @@ def main() -> None:
         if not new_path.exists():
             continue
         title = name.replace("_", " ").title()
-        sections.append(f"""
+        sections.append(
+            f"""
 ## {title}
 
 | Old | New |
 |---|---|
 | ![old](output/{old_path.name}) | ![new](output/{new_path.name}) |
-""")
+"""
+        )
 
     OUT_MD.write_text("\n".join(sections))
     print(f"wrote {OUT_MD} ({len(sections) - 1} regions)")

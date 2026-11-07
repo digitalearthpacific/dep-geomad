@@ -202,7 +202,10 @@ def main(
     ] = None,
     min_timesteps: Annotated[int, typer.Option()] = 5,
     overwrite: Annotated[
-        bool, typer.Option("--overwrite/--no-overwrite", help="Redo files that already exist.")
+        bool,
+        typer.Option(
+            "--overwrite/--no-overwrite", help="Redo files that already exist."
+        ),
     ] = False,
 ) -> None:
     configure_rio(cloud_defaults=True, aws={"aws_unsigned": True})
