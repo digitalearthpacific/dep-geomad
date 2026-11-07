@@ -9,7 +9,7 @@ from odc.algo import mask_cleanup, erase_bad
 def mask_clouds(
     xr: DataArray,
     mask_filters: dict,
-    mask_high_values: bool = True,
+    mask_high_values: bool = False,
     return_mask: bool = False,
 ) -> DataArray:
     """Takes a dictionary of value to a list of functions to mask that value in the scl
@@ -18,6 +18,7 @@ def mask_clouds(
     Example mask_filters: {"cloud shadows":[["dilation", 5]], "cloud medium probability":[["opening", 5], ["dilation", 5]], "cloud high probability":[["opening", 5], ["dilation", 5]], "thin cirrus":[["dilation", 5]]}
     """
     SCL_VALUE_LOOKUP = {
+        "saturated or defective": 1,
         "cloud shadows": 3,
         "cloud medium probability": 8,
         "cloud high probability": 9,
@@ -32,10 +33,13 @@ def mask_clouds(
 
     # For each value, apply the list of functions to mask that value in the scl band
     for value, operation in mask_filters.items():
-        to_mask = scl == SCL_VALUE_LOOKUP[value]
+        if isinstance(value, tuple):
+            to_mask = scl.isin([SCL_VALUE_LOOKUP[v] for v in value])
+        else:
+            to_mask = scl == SCL_VALUE_LOOKUP[value]
         # make sure we're still using ints
         assert to_mask.dtype == bool, f"to_mask dtype is {to_mask.dtype}, expected bool"
-        next_mask = mask_cleanup(to_mask, operation, SCL_VALUE_LOOKUP[value])
+        next_mask = mask_cleanup(to_mask, operation) if operation else to_mask
         mask = mask | next_mask
 
     # Exclude pixels where R, G and B are > THRESHOLD (these are likely to be clouds)
@@ -88,12 +92,14 @@ class GeoMADSentinel2Processor(GeoMADProcessor):
         self,
         drop_vars: list[str] = ["scl"],
         mask_filters: dict = {
-            "cloud shadows": [["dilation", 5]],
-            "cloud medium probability": [["opening", 5], ["dilation", 5]],
-            "cloud high probability": [["opening", 5], ["dilation", 5]],
-            "thin cirrus": [["dilation", 5]],
+            "saturated or defective": [],
+            ("cloud medium probability", "cloud high probability"): [
+                ["opening", 3],
+                ["closing", 3],
+                ["dilation", 3],
+            ],
         },
-        mask_high_values: bool = True,
+        mask_high_values: bool = False,
         scale_and_offset: bool = False,
         **kwargs,
     ) -> None:

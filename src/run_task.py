@@ -150,19 +150,7 @@ def main(
         else:
             bands = S2_BANDS
 
-        filters = [("erosion", 3), ("dilation", 6)]
-        if s2_old_filter:
-            filters = [("dilation", 3), ("erosion", 2)]
-
-        processor_args = {
-            "preprocessor_args": {
-                "mask_clouds": True,
-                "mask_clouds_kwargs": {
-                    "filters": filters,
-                    "keep_ints": True,
-                },
-            }
-        }
+        load_kwargs = {"nodata": 0}
 
         catalog = "https://earth-search.aws.element84.com/v1/"
 
