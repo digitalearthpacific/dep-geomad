@@ -66,6 +66,7 @@ class GeoMADProcessor(Processor):
             "maxiters": 1000,
         },
         drop_vars: list[str] = [],
+        preprocessor: Processor | None = None,
         **kwargs,
     ) -> None:
         super().__init__(send_area_to_processor, **kwargs)
@@ -73,6 +74,7 @@ class GeoMADProcessor(Processor):
         self.min_timesteps = min_timesteps
         self.geomad_options = geomad_options
         self.drop_vars = drop_vars
+        self.preprocessor = preprocessor
 
     def process(self, xr: DataArray) -> Dataset:
         # Raise an exception because this does nothing
@@ -93,8 +95,9 @@ class GeoMADSentinel2Processor(GeoMADProcessor):
         },
         mask_high_values: bool = True,
         scale_and_offset: bool = False,
+        **kwargs,
     ) -> None:
-        super().__init__(drop_vars=drop_vars)
+        super().__init__(drop_vars=drop_vars, **kwargs)
         self.mask_filters = mask_filters
         self.mask_high_values = mask_high_values
         self.scale_and_offset = scale_and_offset
@@ -119,8 +122,6 @@ class GeoMADSentinel2Processor(GeoMADProcessor):
 
         if len(self.drop_vars) > 0:
             xr = xr.drop_vars(self.drop_vars)
-
-        print(xr)
 
         geomad = geomedian_with_mads(xr, **self.geomad_options)
 
@@ -174,3 +175,25 @@ class GeoMADSentinel1Processor(GeoMADProcessor):
         output = set_stac_properties(data, geomad)
 
         return output
+
+
+class GeoMADPostProcessor(Processor):
+    def __init__(
+        self,
+        vars: list[str] = [],
+        drop_vars: list[str] = [],
+        scale: float | None = None,
+        offset: float | None = None,
+    ):
+        self._vars = [v for v in vars if v not in drop_vars]
+        self._scale = scale
+        self._offset = offset
+
+    def process(self, xr: Dataset):
+        if len(self._vars) != 0:
+            for var in self._vars:
+                if self._scale is not None:
+                    xr[var].attrs["scales"] = self._scale
+                if self._offset is not None:
+                    xr[var].attrs["offsets"] = self._offset
+        return xr
