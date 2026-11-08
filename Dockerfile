@@ -3,7 +3,8 @@ FROM ghcr.io/osgeo/gdal:ubuntu-full-3.7.3
 # Don't use old pygeos
 ENV USE_PYGEOS=0
 
-RUN apt-get update && apt-get install -y \
+RUN rm -f /etc/apt/sources.list.d/apache-arrow.sources \
+    && apt-get update && apt-get install -y \
     python3-pip \
     python3-dev \
     git \
