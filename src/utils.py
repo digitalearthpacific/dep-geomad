@@ -2,7 +2,6 @@ import odc.geo.xr  # noqa: F401  registers the .odc accessor
 from datacube_compute import geomedian_with_mads
 from dep_tools.exceptions import EmptyCollectionError
 from dep_tools.processors import Processor
-from dep_tools.stac_utils import set_stac_properties
 from xarray import DataArray, Dataset
 from odc.algo import mask_cleanup, erase_bad
 
@@ -138,9 +137,7 @@ class GeoMADSentinel2Processor(GeoMADProcessor):
         # Add nodata as 0 to the count variable
         geomad["count"].odc.nodata = 0
 
-        output = set_stac_properties(xr, geomad)
-
-        return output
+        return geomad
 
 
 class GeoMADSentinel1Processor(GeoMADProcessor):
@@ -179,9 +176,7 @@ class GeoMADSentinel1Processor(GeoMADProcessor):
         # Add nodata as 0 to the count variable
         geomad["count"].odc.nodata = 0
 
-        output = set_stac_properties(data, geomad)
-
-        return output
+        return geomad
 
 
 class GeoMADPostProcessor(Processor):
