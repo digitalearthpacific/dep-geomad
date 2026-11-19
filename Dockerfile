@@ -25,3 +25,11 @@ RUN pip3 install -r /tmp/requirements.txt
 ADD . /code
 
 WORKDIR /code
+
+# Provenance, recorded in output STAC Items by dep_tools (processing extension).
+# Supplied at build time: --build-arg DOCKER_IMAGE=<image:tag> --build-arg COMMIT=<sha>
+ARG DOCKER_IMAGE
+ARG COMMIT
+ENV IMAGE_TAG=$DOCKER_IMAGE
+ENV COMMIT=$COMMIT
+ENV IMAGE_REPO=https://github.com/digitalearthpacific/dep-geomad/tree/$COMMIT/
