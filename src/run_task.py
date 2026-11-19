@@ -75,6 +75,16 @@ def main(
     scale: Annotated[float | None, typer.Option()] = None,
     offset: Annotated[float | None, typer.Option()] = None,
     visual: Annotated[bool, typer.Option()] = True,
+    public_url_prefix: Annotated[
+        str | None,
+        typer.Option(
+            help=(
+                "Base URL for asset and item hrefs, e.g. https://files.example.com/. "
+                "Default (empty) uses https://<bucket>.s3.<region>.amazonaws.com/, "
+                "which doesn't work for buckets with dots in their name."
+            )
+        ),
+    ] = None,
     s2_old_filter: Annotated[bool, typer.Option()] = False,
     use_collection_one: Annotated[bool, typer.Option()] = False,
     only_tier_one: Annotated[bool, typer.Option()] = True,
@@ -109,6 +119,10 @@ def main(
         dataset_id="geomad",
         version=version,
         time=datetime,
+        # Empty string (e.g. an unset Argo parameter) means use the default
+        full_path_prefix=(
+            public_url_prefix.rstrip("/") + "/" if public_url_prefix else None
+        ),
     )
     stac_document = itempath.stac_path(tile_id)
 
