@@ -1,3 +1,4 @@
+import odc.geo.xr  # noqa: F401  registers the .odc accessor
 from datacube_compute import geomedian_with_mads
 from dep_tools.exceptions import EmptyCollectionError
 from dep_tools.processors import Processor
@@ -190,10 +191,19 @@ class GeoMADPostProcessor(Processor):
         drop_vars: list[str] = [],
         scale: float | None = None,
         offset: float | None = None,
+        visual: bool = False,
+        visual_max_dn: float = 3000,
     ):
         self._vars = [v for v in vars if v not in drop_vars]
         self._scale = scale
         self._offset = offset
+        self._visual = visual
+        # Stretch the true colour image from 0 to visual_max_dn in the units of
+        # the input data, converted to output units if scale/offset are set.
+        _scale = 1 if scale is None else scale
+        _offset = 0 if offset is None else offset
+        self._visual_vmin = _offset
+        self._visual_vmax = visual_max_dn * _scale + _offset
 
     def process(self, xr: Dataset):
         if len(self._vars) != 0:
@@ -202,4 +212,12 @@ class GeoMADPostProcessor(Processor):
                     xr[var].attrs["scales"] = self._scale
                 if self._offset is not None:
                     xr[var].attrs["offsets"] = self._offset
+
+        if self._visual:
+            # uint8 RGBA, with nodata (in red) transparent
+            xr["visual"] = xr.odc.to_rgba(
+                bands=("red", "green", "blue"),
+                vmin=self._visual_vmin,
+                vmax=self._visual_vmax,
+            )
         return xr
