@@ -292,6 +292,8 @@ def main(
                     logger=log,
                     post_processor=post_processor,
                     stac_creator=stac_creator,
+                    # Sets the start, end and centre datetimes of the STAC Item
+                    period=datetime,
                 ).run()
     except EmptyCollectionError:
         log.info("No items found for this tile")
