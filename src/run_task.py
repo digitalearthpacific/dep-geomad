@@ -74,6 +74,7 @@ def main(
     overwrite: Annotated[bool, typer.Option()] = False,
     scale: Annotated[float | None, typer.Option()] = None,
     offset: Annotated[float | None, typer.Option()] = None,
+    visual: Annotated[bool, typer.Option()] = True,
     s2_old_filter: Annotated[bool, typer.Option()] = False,
     use_collection_one: Annotated[bool, typer.Option()] = False,
     only_tier_one: Annotated[bool, typer.Option()] = True,
@@ -222,14 +223,25 @@ def main(
     # Custom writer so we write multithreaded
     writer = AwsDsCogWriter(itempath, write_multithreaded=True)
 
+    # A true colour image (uint8 RGBA, stretched 0-3000) is only made for S2
+    visual = visual and base_product == "s2"
+    asset_overrides = (
+        {"visual": {"roles": ["visual"], "title": "True colour image"}}
+        if visual
+        else None
+    )
+
     # STAC making thing
-    stac_creator = StacCreator(itempath=itempath, with_raster=True)
+    stac_creator = StacCreator(
+        itempath=itempath, with_raster=True, asset_overrides=asset_overrides
+    )
 
     post_processor = GeoMADPostProcessor(
         vars=bands,
         drop_vars=drop_vars,
         scale=scale,
         offset=offset,
+        visual=visual,
     )
 
     try:
